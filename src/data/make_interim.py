@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 import numpy as np
+import math
 import scipy.io
 import os
 import shutil
@@ -13,7 +14,7 @@ def process_interim_annotations(data, datasplit):
     """ Store annotations in the interim folder as pandas dataframes
     """
     data_annotations = []
-    for id_key in range(4):
+    for id_key in range(len(data)):
         data_key = data[id_key]
 
         # Get the image's filename, size and original database
@@ -28,8 +29,26 @@ def process_interim_annotations(data, datasplit):
         for person in range(people):
             bbox.append([int(label[person][0][0][0]), int(label[person][0][0][1]), int(label[person][0][0][2]), int(label[person][0][0][3])])
             if datasplit == 'train':
-                print("hola")
-            else:
+                # Combined discrete labels
+                label_person_disc = []
+                if len(label[person][1]) > 0: # Check if there are labels
+                    for i in range(len(label[person][1][0])):
+                        label_person_disc.append(label[person][1][0][i])
+                    label_disc.append(label_person_disc)
+                else:
+                    label_disc.append(['NA'])
+            
+                # Combined continious labels
+                if not math.isnan(label[person][2][0][0][0][0][0]): # Check if there are labels (not NaN)
+                    label_cont.append([int(label[person][2][0][0][0][0][0]),int(label[person][2][0][0][1][0][0]), int(label[person][2][0][0][2][0][0])])
+                else:
+                    label_cont.append(['NA', 'NA', 'NA'])
+
+                # Gender and age
+                gender.append(label[person][3][0][0])
+                age.append(label[person][4][0][0])
+
+            else: # Test and validation as they have different structure
                 # Combined discrete labels
                 label_person_disc = []
                 if len(label[person][2]) > 0: # Check if there are labels
@@ -37,9 +56,8 @@ def process_interim_annotations(data, datasplit):
                         label_person_disc.append(label[person][2][0][i])
                     label_disc.append(label_person_disc)
                 else:
-                    print(f"Warning: Empty array for person {person} in datasplit {datasplit}")
                     label_disc.append(['NA'])
-                
+            
                 # Combined continious labels
                 label_cont.append([int(label[person][4][0][0][0][0][0]),int(label[person][4][0][0][1][0][0]), int(label[person][4][0][0][2][0][0])])
                 # Gender and age
@@ -49,7 +67,6 @@ def process_interim_annotations(data, datasplit):
         annotation_key = {'filename': filename, 'orig_db': orig_db, 'img_size': img_size,
         'people': people, 'bbox': bbox, 'label_disc': label_disc, 'label_cont': label_cont, 'gender': gender, 'age':age}
         data_annotations.append(annotation_key)
-        print("Annotations for image", id_key, "processed")
     return pd.DataFrame(data_annotations, columns = INTERIM_COLUMNS)
 
 def copy_photos_to_interim(orig_data = RAW_DATA_DIR):
@@ -59,17 +76,20 @@ def copy_photos_to_interim(orig_data = RAW_DATA_DIR):
 
     # Fetch all dataset directories
     for dataset_name in os.listdir(source_folder):
-        # Construct full file path
+        # Construct full dataset directory path
         dataset_folder = os.path.join(source_folder, dataset_name, 'images')
-        destination = os.path.join(destination_folder, dataset_name)
+        destination_folder = os.path.join(INTERIM_DATA_DIR, 'images', dataset_name)
+        if not os.path.exists(destination_folder):
+            os.makedirs(destination_folder)
 
         # Check if it is a directory
-        if os.path.isdirectory(dataset_folder):
+        if os.path.isdir(dataset_folder):
             for file_name in os.listdir(dataset_folder):
-                # Copy only photos
-                if os.path.isfile(os.path.join(source_folder, file_name)) and file_name.endswith('.jpg'):
+                # Copy only .jpg photos
+                if os.path.isfile(os.path.join(dataset_folder, file_name)) and file_name.endswith('.jpg'):
+                    source = os.path.join(dataset_folder, file_name)
+                    destination = os.path.join(destination_folder, file_name)
                     shutil.copy(source, destination)
-                    print('copied', file_name)
 
 
 def main():
@@ -97,10 +117,11 @@ def main():
         if datasplit in ['test', 'train', 'val']:
             print("Working on data split:", datasplit)
             dataframe_anotations = process_interim_annotations(mat[datasplit][0], datasplit)
-            print(dataframe_anotations.shape)
+            print("Total entries:", dataframe_anotations.shape[0])
             dataframe_anotations.to_pickle(os.path.join(INTERIM_DATA_DIR, "annotations", datasplit + '.pkl'))
 
-            
+    # Copy photos to interim folder
+    print("---------- Copying photos to interim folder ------------")
     copy_photos_to_interim()
     print("---------- Finished generating interim dataset annotations ------------")
 if __name__ == '__main__':
