@@ -11,32 +11,32 @@ from src import RAW_DATA_DIR, INTERIM_DATA_DIR, INTERIM_COLUMNS
 
 
 def process_interim_annotations(data, datasplit):
-    """ Store annotations in the interim folder as pandas dataframes
+    """ Process annotations from mat file format to pandas DataFrame for given data split
     """
-    data_annotations = []
+    data_annotations = [] # List of dictionaries with the annotations
     for id_key in range(len(data)):
-        data_key = data[id_key]
+        data_sample = data[id_key] # Get sample of the dataset
 
         # Get the image's filename, size and original database
-        filename = data_key[1][0].split("/")[0]+"/"+data_key[0][0] # data_key[1][0] is the folder name and data_key[0][0] is the filename, I delete images intermediate folder
-        img_size = [int(data_key[2][0][0][0][0][0]), int(data_key[2][0][0][1][0][0])]
-        orig_db = data_key[3][0][0][0][0]
+        path = data_sample[1][0].split("/")[0]+"/"+data_sample[0][0] # data_sample[1][0] is the folder name and data_sample[0][0] is the filename, I delete images intermediate folder
+        img_size = [int(data_sample[2][0][0][0][0][0]), int(data_sample[2][0][0][1][0][0])]
+        orig_db = data_sample[3][0][0][0][0]
 
-        # Get the image's people labels
-        label = data_key[4][0]
-        people = len(label)
-        bbox = []; label_disc = []; label_cont = []; gender = []; age = []
+        # Get the image's people labelling, as there may be more than one person in the image
+        label = data_sample[4][0] 
+        people = len(label); 
+        bbox = []; label_cat = []; label_cont = []; gender = []; age = [] # initialize list to store each people information
         for person in range(people):
             bbox.append([int(label[person][0][0][0]), int(label[person][0][0][1]), int(label[person][0][0][2]), int(label[person][0][0][3])])
             if datasplit == 'train':
                 # Combined discrete labels
-                label_person_disc = []
+                label_person_cat = []
                 if len(label[person][1]) > 0: # Check if there are labels
-                    for i in range(len(label[person][1][0])):
-                        label_person_disc.append(label[person][1][0][i])
-                    label_disc.append(label_person_disc)
+                    for i in range(len(label[person][1][0][0][0][0])):
+                        label_person_cat.append(label[person][1][0][0][0][0][i][0])
+                    label_cat.append(label_person_cat)
                 else:
-                    label_disc.append(['NA'])
+                    label_cat.append(['NA'])
             
                 # Combined continious labels
                 if not math.isnan(label[person][2][0][0][0][0][0]): # Check if there are labels (not NaN)
@@ -50,24 +50,26 @@ def process_interim_annotations(data, datasplit):
 
             else: # Test and validation as they have different structure
                 # Combined discrete labels
-                label_person_disc = []
+                label_person_cat = []
                 if len(label[person][2]) > 0: # Check if there are labels
                     for i in range(len(label[person][2][0])):
-                        label_person_disc.append(label[person][2][0][i])
-                    label_disc.append(label_person_disc)
+                        label_person_cat.append(label[person][2][0][i][0])
+                    label_cat.append(label_person_cat)
                 else:
-                    label_disc.append(['NA'])
+                    label_cat.append(['NA'])
             
                 # Combined continious labels
                 label_cont.append([int(label[person][4][0][0][0][0][0]),int(label[person][4][0][0][1][0][0]), int(label[person][4][0][0][2][0][0])])
                 # Gender and age
                 gender.append(label[person][5][0][0])
                 age.append(label[person][6][0][0])
-        # Create the pandas DataFrame with column name is provided explicitly
-        annotation_key = {'filename': filename, 'orig_db': orig_db, 'img_size': img_size,
-        'people': people, 'bbox': bbox, 'label_disc': label_disc, 'label_cont': label_cont, 'gender': gender, 'age':age}
+
+        # Create the pandas DataFrame with the collected information
+        annotation_key = {'path': path, 'orig_db': orig_db, 'img_size': img_size,
+        'people': people, 'bbox': bbox, 'label_cat': label_cat, 'label_cont': label_cont, 'gender': gender, 'age':age}
         data_annotations.append(annotation_key)
     return pd.DataFrame(data_annotations, columns = INTERIM_COLUMNS)
+
 
 def copy_photos_to_interim(orig_data = RAW_DATA_DIR):
     """ Copy photos from raw to interim folder
