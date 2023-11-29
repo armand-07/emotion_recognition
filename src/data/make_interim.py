@@ -42,7 +42,7 @@ def process_interim_annotations(data, datasplit):
                 if not math.isnan(label[person][2][0][0][0][0][0]): # Check if there are labels (not NaN)
                     label_cont.append([int(label[person][2][0][0][0][0][0]),int(label[person][2][0][0][1][0][0]), int(label[person][2][0][0][2][0][0])])
                 else:
-                    label_cont.append(['NA', 'NA', 'NA'])
+                    label_cont.append([np.nan, np.nan, np.nan])
 
                 # Gender and age
                 gender.append(label[person][3][0][0])

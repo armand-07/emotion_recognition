@@ -15,6 +15,7 @@ def display_img_annot (row_example):
     # Reading an image and transforming it to RGB
     img = cv2.imread(str(row_example_path)) 
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)      # Convert BGR to RGB
+    print("The image shape is:", img.shape)
     thickness = 2                                   # Line thickness of 2 px
     text_color = (255, 255, 255)                    # White color in RGB
 
@@ -29,6 +30,11 @@ def display_img_annot (row_example):
         color = (r, g, b)       # Blue color in RGB
         x1 = row_example['bbox'][person_id][0]; y1 = row_example['bbox'][person_id][1]
         x2 = row_example['bbox'][person_id][2]; y2 = row_example['bbox'][person_id][3]
+
+        if x1 < 0: x1 = 0
+        if y1 < 0: y1 = 0
+        if x2 > img.shape[1]: x2 = img.shape[1]
+        if y2 > img.shape[0]: y2 = img.shape[0]
 
         # Window name in which image is displayed
         img = cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness) 
