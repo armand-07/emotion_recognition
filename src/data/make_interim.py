@@ -95,9 +95,8 @@ def copy_photos_to_interim(orig_data = RAW_DATA_DIR):
 
 
 def main():
-    """ Runs data processing scripts to turn raw data from (data/raw) into
-        interim data ready to be preprocessed and make data explotation 
-        (saved in data/interim).
+    """ Runs data processing scripts to turn raw data from ../data/raw into
+        interim data ready to make data explotation saved in ../data/interim.
     """
     # Delete the interim folder if it exists to clean creation of new data
     if os.path.exists(INTERIM_DATA_DIR):

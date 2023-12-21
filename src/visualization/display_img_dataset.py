@@ -43,6 +43,7 @@ def display_img_annot (sample_df, bbox_thickness = 2, font_size = 0.6):
 
         # Window name in which image is displayed
         img = cv2.rectangle(img, (x1, y1), (x2, y2), color, bbox_thickness) 
+        print((x1, y1), (x2-x1, y2-y1))
         
         # For the text background
         # Finds space required by the text so that we can put a background with that amount of width.

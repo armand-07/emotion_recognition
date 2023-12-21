@@ -1,0 +1,19 @@
+preprocessing:
+  orig_datasets: ["emotic", "affectnet"]
+  face_detection_algorithm: "Haar Cascade Classifier"
+model:
+  image_norm: True
+  data_augmentation: True
+  algorithm_name: "Hubert_Classifier"
+  random_state: 33 #seed for reproducibility
+  num_classes: 36 # total possible classifications
+
+  batch_size: 256 # training and valid batch size
+  lr: 0.0001 # learning rate
+  momentum: 0.9 # SGD momentum, for SGD only
+  optimizer: 'adam' # optimization method: sgd | adam
+  adapter_hidden_size: 128 # model hyperparameter
+  epochs: 20  # maximum number of epochs to train
+  patience: 5 # how many epochs of no loss improvement should we wait before stop training
+  log_interval: 15 # how many batches to wait before logging training status
+  
