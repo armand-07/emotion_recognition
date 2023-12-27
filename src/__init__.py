@@ -1,11 +1,12 @@
 from pathlib import Path
+import os
 
 
 # Define global variables
 ROOT_DIR = Path(Path(__file__).resolve().parent.parent)
-MODELS_DIR = ROOT_DIR / "models"
-RAW_DATA_DIR = ROOT_DIR / "data" / "raw"
-INTERIM_DATA_DIR = ROOT_DIR / "data" / "interim"
+MODELS_DIR = os.path.join(ROOT_DIR, "models")
+RAW_DATA_DIR = os.path.join(ROOT_DIR, "data", "raw")
+INTERIM_DATA_DIR = os.path.join(ROOT_DIR, "data", "interim")
 
 
 

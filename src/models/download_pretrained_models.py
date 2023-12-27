@@ -1,23 +1,28 @@
 import requests
-import shutil
-import bz2
 import os
 
-from src import MODELS_DIR
+
+from src import MODELS_DIR  
 
 
-def download_MMOD_CNN_pretrained():
-    """ Downloads the pretrained model for the MMOD CNN face detector.
+def download_YOLO_model_face_recognition(size="medium", directory=MODELS_DIR):
+    """ Downloads the pretrained model for the YOLO depending on specified size.
     """
     # URL of the file to be downloaded
-    url = "http://dlib.net/files/mmod_human_face_detector.dat.bz2"
+    # Replace with the URL of the YOLOv8 model
+    if size == "nano":
+        url = "https://github.com/akanametov/yolov8-face/releases/download/v0.0.0/yolov8n-face.pt"
+    elif size == "medium":
+        url = "https://github.com/akanametov/yolov8-face/releases/download/v0.0.0/yolov8m-face.pt"
+    elif size == "large":
+        url = "https://github.com/akanametov/yolov8-face/releases/download/v0.0.0/yolov8l-face.pt"
+    
     # Send a HTTP request to the URL of the file
-    response = requests.get(url, stream=True)
+    filename = url.split("/")[-1]
+    response = requests.get(url)
 
-    # Decompress the response content directly into a file
-    decompressor = bz2.BZ2Decompressor()
-    with open(os.path.join(MODELS_DIR, "mmod_human_face_detector.dat"), 'wb') as f_out:
-        for data in response.iter_content(chunk_size=1024):
-            f_out.write(decompressor.decompress(data))
+    model_path = os.path.join(directory, filename)
+    with open(model_path, mode="wb") as file:
+        file.write(response.content)
 
 
