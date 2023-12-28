@@ -1,0 +1,20 @@
+schema: '2.0'
+stages:
+  interim:
+    cmd: python -m src.data.make_interim
+    deps:
+    - path: data/raw/
+      hash: md5
+      md5: 6941c128dbe784b6bcee6fdbbe5323fc.dir
+      size: 5137843928
+      nfiles: 59810
+    - path: src/data/make_interim.py
+      hash: md5
+      md5: 795ad30333732f2e5e22b6da7dfb8b20
+      size: 6013
+    outs:
+    - path: data/interim/
+      hash: md5
+      md5: 96dd4c77867b2f45e43da837c769eef6.dir
+      size: 3668206305
+      nfiles: 23188
