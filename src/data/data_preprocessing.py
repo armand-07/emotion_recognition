@@ -10,7 +10,7 @@ import cv2
 import torchvision.transforms as transforms
 
 from src import INTERIM_DATA_DIR, INTERIM_COLUMNS, PROCESSED_COLUMNS
-from src.models.face_detection_model import detect_faces_haar_cascade
+from emotion_recognition.src.models.inference_face_detection_model import detect_faces_haar_cascade
 from src.visualization.display_img_dataset import display_img_annot
 
 def get_person_data_emotic(img, sample, people_idx, faces_bbox, params):

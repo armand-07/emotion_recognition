@@ -1,0 +1,8 @@
+stages:
+  interim:
+    cmd: python -m src.data.preprocess_dataset
+    deps:
+    - data/raw/
+    - src/data/make_interim.py
+    outs:
+    - data/interim/

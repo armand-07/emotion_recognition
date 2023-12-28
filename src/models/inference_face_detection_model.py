@@ -1,8 +1,4 @@
 import cv2
-from PIL import Image
-import os
-
-from src import MODELS_DIR
 
 def detect_faces_HAAR_cascade(img, pretrained_model):
     """ Detects faces in an image using the given Haar cascade pretrained model. 
