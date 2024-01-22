@@ -7,12 +7,14 @@ ROOT_DIR = Path(Path(__file__).resolve().parent.parent)
 MODELS_DIR = os.path.join(ROOT_DIR, "models")
 RAW_DATA_DIR = os.path.join(ROOT_DIR, "data", "raw")
 INTERIM_DATA_DIR = os.path.join(ROOT_DIR, "data", "interim")
-RAW_AffectNet_DIR = os.path.normpath("/mnt/gpid08/datasets/affectnet/") # substitute with the actual data path
-
+AFFECTNET_DIR = os.path.normpath("/mnt/gpid08/datasets/affectnet/") # substitute with the actual data path
+RAW_AFFECTNET_DIR =  os.path.join(AFFECTNET_DIR, "raw") 
+INTERIM_AFFECTNET_DIR = os.path.join(AFFECTNET_DIR, "interim")
 
 
 # Define columns for the interim labels
-INTERIM_COLUMNS = ['path','orig_db', 'img_size', 'people', 'bbox', 'label_cat', 'label_cont', 'gender', 'age']
+INTERIM_COLUMNS_PAMI = ['path','orig_db', 'img_size', 'people', 'bbox', 'label_cat', 'label_cont', 'gender', 'age']
+INTERIM_COLUMNS_AFFECTNET = ['path', 'label_cat', 'val', 'aro']
 
 # Define columns for the processed labels
 PROCESSED_COLUMNS = ['face_photo_tensor', 'label_cat', 'label_cont']
