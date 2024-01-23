@@ -18,7 +18,7 @@ def pami_process_interim_annotations(datasplit, data):
         data_sample = data[id_key] # Get sample of the dataset
 
         # Get the image's filename, size and original database
-        path = data_sample[1][0].split("/")[0]+"/"+data_sample[0][0] # data_sample[1][0] is the folder name and data_sample[0][0] is the filename, I delete images intermediate folder
+        path = os.path.join(RAW_DATA_DIR, 'PAMI', 'emotic', 'emotic', data_sample[1][0].split("/")[0], data_sample[0][0]) # data_sample[1][0] is the folder name and data_sample[0][0] is the filename, I delete images intermediate folder
         img_size = [int(data_sample[2][0][0][0][0][0]), int(data_sample[2][0][0][1][0][0])]
         orig_db = data_sample[3][0][0][0][0]
 
@@ -71,22 +71,23 @@ def pami_process_interim_annotations(datasplit, data):
     return pd.DataFrame(data_annotations, columns = INTERIM_COLUMNS_PAMI)
 
 
+
 def affectnet_process_interim_annotations(id_list, datasplit_path):
     """ Process annotations from mat file format to pandas DataFrame for validation and train"""
 
     data_annotations = [] # List of dictionaries with the annotations
-    filenames = ['aro', 'lnd', 'val', 'exp']
+    filenames = ['aro', 'val', 'exp']
     annot_proccessed = 0
     for id in id_list:
         exp = 0; valence = 0; arousal = 0
         for filename in filenames:
             data = np.load(os.path.join(datasplit_path, "annotations", id + "_" + filename + ".npy"))
             if filename == "exp":
-                exp = int(data.item())
+                exp = int(data)
             elif filename == "valence":
-                valence = float(data.item())
+                valence = float(data)
             elif filename == "arousal":
-                arousal = float(data.item())
+                arousal = float(data)
         id_image_path = os.path.join(datasplit_path, "images", id + ".jpg")
         annotation_key = {'path': id_image_path, 'label_cat': exp, 'val': valence, 'aro': arousal}
         data_annotations.append(annotation_key)
@@ -94,6 +95,8 @@ def affectnet_process_interim_annotations(id_list, datasplit_path):
             print("Annotations processed:", annot_proccessed)
         annot_proccessed += 1
     return pd.DataFrame(data_annotations, columns = INTERIM_COLUMNS_AFFECTNET)
+
+
 
 def main():
     """ Runs data processing scripts to turn raw data from ../data/raw into

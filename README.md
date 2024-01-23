@@ -3,6 +3,12 @@ Emotion Recognition with Computer Vision
 
 This project harnesses the power of advanced deep learning techniques to interpret and understand human emotions from facial expressions. Emotion recognition holds significant potential in various fields, including human-computer interaction, healthcare, and sentiment analysis.
 
+Interim dataset creation:
+It is done by getting the relevant columsn for data exploration and data preprocessing. The images path is obtained from raw path, so if some movement in data for raw is done, the interim annotations should be updated.
+
+Data preprocessing:
+We also store the images in a numpy array format for faster processing. The labels are also stored in a numpy array. The images are stored in a numpy array format for faster processing. The images are resized to 48x48 pixels and stored in a numpy array. The labels are also stored in a numpy array.
+
 Project Organization
 ------------
 

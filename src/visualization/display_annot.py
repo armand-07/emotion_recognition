@@ -65,8 +65,8 @@ def plot_bbox_annotations(img, bbox_annot, format ="xywh", conf_threshold = 0, c
 
 
 
-def display_img_annot (sample_df, bbox_thickness = 2, font_size = 0.6):
-    sample_path = Path(os.path.join(INTERIM_DATA_DIR,'images', sample_df['path']))
+def display_img_annot_PAMI (sample_df, bbox_thickness = 2, font_size = 0.6):
+    sample_path = Path(sample_df['path'])
     print("The path of the example image is:", sample_path)
     print("The image orig DB is:", sample_df['orig_db'])
 
@@ -134,7 +134,7 @@ def display_img_set (grid_size, images, title = None):
     axs = axs.ravel()
 
     for i in range(num_images):
-        path = Path(os.path.join(INTERIM_DATA_DIR,'images', images[i]))
+        path = Path(images[i])
         img = Image.open(str(path))
         axs[i].imshow(img)
 
