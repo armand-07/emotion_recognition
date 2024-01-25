@@ -14,10 +14,10 @@ INTERIM_AFFECTNET_DIR = os.path.join(AFFECTNET_DIR, "interim")
 
 # Define columns for the interim labels
 INTERIM_COLUMNS_PAMI = ['path','orig_db', 'img_size', 'people', 'bbox', 'label_cat', 'label_cont', 'gender', 'age']
-INTERIM_COLUMNS_AFFECTNET = ['path', 'label_cat', 'val', 'aro']
+INTERIM_COLUMNS_AFFECTNET = ['path', 'cat_emot', 'valence', 'arousal']
 
 # Define columns for the processed labels
-PROCESSED_COLUMNS = ['face_photo_tensor', 'label_cat', 'label_cont']
+PROCESSED_COLUMNS = ['face_image_tensor', 'cat_emot', 'cont_emot'] # represents the processed image, the categorical emotion and the continuous emotion
 
 # Define the corresponding categorical emotions of AffectNet
 AFFECTNET_CAT_EMOT = ["Neutral", "Happy", "Sad", "Surprise", "Fear", "Disgust", "Anger", "Contempt"] # 0: Neutral, 1: Happy, 2: Sad, 3: Surprise, 4: Fear, 5: Disgust, 6: Anger, 7: Contempt

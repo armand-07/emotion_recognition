@@ -18,7 +18,7 @@ def pami_process_interim_annotations(datasplit, data):
         data_sample = data[id_key] # Get sample of the dataset
 
         # Get the image's filename, size and original database
-        path = os.path.join(RAW_DATA_DIR, 'PAMI', 'emotic', 'emotic', data_sample[1][0].split("/")[0], data_sample[0][0]) # data_sample[1][0] is the folder name and data_sample[0][0] is the filename, I delete images intermediate folder
+        path = os.path.join(RAW_DATA_DIR, 'PAMI', 'emotic', 'emotic', data_sample[1][0].split("/")[0], 'images', data_sample[0][0]) # data_sample[1][0] is the folder name and data_sample[0][0] is the filename, I delete images intermediate folder
         img_size = [int(data_sample[2][0][0][0][0][0]), int(data_sample[2][0][0][1][0][0])]
         orig_db = data_sample[3][0][0][0][0]
 
@@ -76,21 +76,16 @@ def affectnet_process_interim_annotations(id_list, datasplit_path):
     """ Process annotations from mat file format to pandas DataFrame for validation and train"""
 
     data_annotations = [] # List of dictionaries with the annotations
-    filenames = ['aro', 'val', 'exp']
     annot_proccessed = 0
     for id in id_list:
-        exp = 0; valence = 0; arousal = 0
-        for filename in filenames:
-            data = np.load(os.path.join(datasplit_path, "annotations", id + "_" + filename + ".npy"))
-            if filename == "exp":
-                exp = int(data)
-            elif filename == "valence":
-                valence = float(data)
-            elif filename == "arousal":
-                arousal = float(data)
+        exp = int(np.load(os.path.join(datasplit_path, "annotations", id + "_" + 'exp' + ".npy")))
+        valence = float(np.load(os.path.join(datasplit_path, "annotations", id + "_" + 'val' + ".npy")))
+        arousal = float(np.load(os.path.join(datasplit_path, "annotations", id + "_" + 'aro' + ".npy")))
         id_image_path = os.path.join(datasplit_path, "images", id + ".jpg")
-        annotation_key = {'path': id_image_path, 'label_cat': exp, 'val': valence, 'aro': arousal}
+
+        annotation_key = {'path': id_image_path, 'cat_emot': exp, 'valence': valence, 'arousal': arousal}
         data_annotations.append(annotation_key)
+
         if annot_proccessed % 10000 == 0:
             print("Annotations processed:", annot_proccessed)
         annot_proccessed += 1
@@ -140,7 +135,6 @@ def main():
                 id_list.add(photo_idx)
         print("Working on AffectNet data split:", datasplit, "with a total of", len(id_list), "images")
         dataframe_anotations = affectnet_process_interim_annotations(id_list, datasplit_path)
-        print("Total entries:", dataframe_anotations.shape[0])
         dataframe_anotations.to_pickle(os.path.join(INTERIM_AFFECTNET_DIR, "annotations", datasplit + '.pkl'))
     print("---------- Finished generating interim dataset annotations ------------")
 if __name__ == '__main__':

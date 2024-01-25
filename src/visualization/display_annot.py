@@ -84,7 +84,7 @@ def display_img_annot_PAMI (sample_df, bbox_thickness = 2, font_size = 0.6):
     # Create a table
     annotations_table = PrettyTable()
     # Define column names
-    annotations_table.field_names = ["Person","Gender", "Age", "Emotions categories", "Continious emotions (Valence,Arousal,Dominance)"]
+    annotations_table.field_names = ["Person","Gender", "Age", "Emotions categories", "Continuous emotions [Valence, Arousal, Dominance]"]
 
     for person_id in range(sample_df['people']):
         # Window characteristics
