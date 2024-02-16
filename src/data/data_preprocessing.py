@@ -4,22 +4,15 @@ import yaml
 import os
 
 import pandas as pd
-import datasets
 from sklearn.model_selection import train_test_split
 
 import numpy as np
 import cv2
 import torch
-import torch.nn.functional as F
-import torchvision.transforms as transforms
 
-from src import (INTERIM_DATA_DIR, INTERIM_COLUMNS_AFFECTNET, INTERIM_AFFECTNET_DIR, 
+from src import (INTERIM_AFFECTNET_DIR, 
 AFFECTNET_CAT_EMOT, PROCESSED_AFFECTNET_DIR, PROCESSED_COLUMNS)
-
-
-def soft_label_encoding(y, classes, epsilon=0.1):
-    y_soft = y * (1 - epsilon) + epsilon / classes
-    return y_soft
+from src.data.encoding import cat2one_hot, cart2polar_encoding
 
 
 def data_generator(data, params):
@@ -30,39 +23,50 @@ def data_generator(data, params):
     for idx in range(len(data)):
         sample = data.loc[idx]
         img_path = sample['path']
-        id = img_path.split('/')[-1].split('.')[0]
-            
+        id = idx # Get the id of the image as a range, not based on original archive based id
+        
         # Get the encoding of the categorical emotion
-        cat_emot = F.one_hot(torch.tensor(sample['cat_emot']), num_classes=number_of_classes)
-        if params['categorical_format'] == 'hard_label':
-            pass # Do nothing
-        elif params['categorical_format'] == 'soft_label':
-            cat_emot = soft_label_encoding(cat_emot, number_of_classes)
-        else:
-            assert False, "The categorical format is not valid."
+        cat_emot = cat2one_hot(sample['cat_emot'], number_of_classes, params['categorical_format'])
 
         # Get the encoding of the continuous emotions
         cont_emot = torch.tensor([sample['valence'], sample['arousal']])
         if params['continuous_format'] == 'cartesian':
             pass
         elif params['continuous_format'] == 'polar':
-            # Convert to polar coordinates
-            radius = torch.sqrt(cartesian_coords[:, 0]**2 + cartesian_coords[:, 1]**2)
-            angle = torch.atan2(cartesian_coords[:, 1], cartesian_coords[:, 0])
-            # Combine radius and angle into a single tensor
-            cont_emot = torch.stack((radius, angle), dim=1)
+            cont_emot = cart2polar_encoding(cont_emot) 
 
         # Yield the result
         yield {PROCESSED_COLUMNS[0]: id, PROCESSED_COLUMNS[1]: img_path, 
                PROCESSED_COLUMNS[2]: cat_emot, PROCESSED_COLUMNS[3]: cont_emot}
+        
+
+def generate_data_weights(data, datasplit):
+    """ Generates the weights of the categorical emotions and stores them in a tensor. It is a 
+    tensor that contains the weights for each id in the datasplit. 
+    """
+    annotation_weights = data['cat_emot'].value_counts().reset_index(name='count')
+    annotation_weights['weight'] = 1 / annotation_weights['count']
+    annotation_weights = annotation_weights.drop('count', axis=1).set_index('cat_emot')
+
+    data_weights = torch.empty(len(data))
+
+    for idx in range(len(data)):
+        sample = data.loc[idx]
+        cat_emot = sample['cat_emot']
+        weight = annotation_weights.loc[cat_emot]['weight']
+        data_weights[idx] = torch.tensor(weight, dtype=torch.float64) # Assign the weight of the current sample to the tensor
+
+    torch.save(data_weights, os.path.join(PROCESSED_AFFECTNET_DIR,'data_weights_' + datasplit + '.pt'))
 
 
 def store_data_split(data, datasplit, params):
-    """ Returns the processed data in Dataset format.
+    """ Stores the processed data in a pickle file and generates the weights of the categorical emotions.
     """
-    # Use the generator function
+    # Generate annotations
     annotations = pd.DataFrame(data_generator(data, params), columns=PROCESSED_COLUMNS)
     annotations.to_pickle(os.path.join(PROCESSED_AFFECTNET_DIR, datasplit + '.pkl'))
+
+    generate_data_weights(data, datasplit)
 
 
 def data_preprocessing_affectnet(params):
