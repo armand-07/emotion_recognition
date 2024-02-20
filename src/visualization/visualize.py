@@ -9,8 +9,8 @@ from torch.distributions import Categorical
 
 
 def visualize_batch(img, cat_label, col = 8):
-    img = img.detach().numpy().transpose(0, 2,3,1)
-    # now we need to unnormalize our images. 
+    img = img.numpy().transpose((0, 2, 3, 1)) # Convert the image from [B,C,H,W] to [B,H,W,C]
+    print(img.shape)
     row = math.ceil(img.shape[0]/col)
     fig = plt.figure(figsize=(10,1.5*row))
 

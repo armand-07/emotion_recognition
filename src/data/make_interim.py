@@ -137,5 +137,7 @@ def main():
         dataframe_anotations = affectnet_process_interim_annotations(id_list, datasplit_path)
         dataframe_anotations.to_pickle(os.path.join(INTERIM_AFFECTNET_DIR, "annotations", datasplit + '.pkl'))
     print("---------- Finished generating interim dataset annotations ------------")
+
+    
 if __name__ == '__main__':
     main()
