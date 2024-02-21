@@ -2,7 +2,7 @@ import argparse
 import pandas as pd
 import os
 import torch
-import torchvision.transforms.v2 as v2
+import torchvision.transforms.v2 as transforms
 from tqdm import tqdm
 
 from src import PROCESSED_AFFECTNET_DIR
@@ -38,7 +38,7 @@ def main():
     count = 0
     psum = torch.tensor([0.0, 0.0, 0.0]).to(device)
     psum_sq = torch.tensor([0.0, 0.0, 0.0]).to(device)
-    transform = v2.ToDtype(torch.float32, scale = True) # Convert the image to float32 and scale it to [0,1]
+    img_transforms = transforms.ToDtype(torch.float64, scale = True) # Convert the image to float32 and scale it to [0,1]
 
     # Compute metrics
     for datasplit in datasplits:
@@ -46,15 +46,15 @@ def main():
         df = pd.read_pickle(os.path.join(PROCESSED_AFFECTNET_DIR, datasplit + '.pkl'))
         count += df.shape[0]
         print("Total entries:", df.shape[0])
-        dataset= AffectNetDatasetValidation(annotations_path=os.path.join(PROCESSED_AFFECTNET_DIR, datasplit + '.pkl'), transform = transform)
-        image_loader = torch.utils.data.DataLoader(dataset, batch_size=256, shuffle=False, pin_memory=True)
+        dataset= AffectNetDatasetValidation(annotations_path=os.path.join(PROCESSED_AFFECTNET_DIR, datasplit + '.pkl'), img_transforms = img_transforms)
+        image_loader = torch.utils.data.DataLoader(dataset, batch_size=128, shuffle=False, pin_memory=True)
         for inputs in tqdm(image_loader):
             imgs = inputs[1].to(device)
             psum += imgs.sum(axis=[0, 2, 3])
             psum_sq += (imgs**2).sum(axis=[0, 2, 3])
 
     # Compute final metrics
-    pixel_count = len(df) * PIXELS_IMAGE
+    pixel_count = count * PIXELS_IMAGE
     total_mean = psum / pixel_count
     total_var = (psum_sq / pixel_count) - (total_mean**2)
     total_std = torch.sqrt(total_var)
