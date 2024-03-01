@@ -8,18 +8,20 @@ import torch
 from torch.distributions import Categorical
 
 
-def visualize_batch(img, cat_label, col = 8):
+def visualize_batch(img, cat_label = None, col = 8):
     img = img.numpy().transpose((0, 2, 3, 1)) # Convert the image from [B,C,H,W] to [B,H,W,C]
     row = math.ceil(img.shape[0]/col)
     fig = plt.figure(figsize=(10,1.5*row))
 
     # Set a general title for the figure
-    fig.suptitle('Batch visualization with categorical annotation', fontsize=12, y=0.95)
+    if cat_label is not None:
+        fig.suptitle('Batch visualization with categorical annotation', fontsize=12, y=0.95)
     
     for i in range(img.shape[0]):
         ax = fig.add_subplot(row, col, i+1, xticks=[], yticks=[])
         ax.imshow(img[i])
-        ax.set_title(AFFECTNET_CAT_EMOT[np.argmax(cat_label[i]).item()], fontsize=10)
+        if cat_label is not None:
+            ax.set_title(AFFECTNET_CAT_EMOT[np.argmax(cat_label[i]).item()], fontsize=10)
     plt.show()
 
 

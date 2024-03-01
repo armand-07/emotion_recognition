@@ -5,20 +5,22 @@ import torch
 import torchvision.transforms.v2 as transforms
 from tqdm import tqdm
 
-from src import PROCESSED_AFFECTNET_DIR
+from src import PROCESSED_AFFECTNET_DIR, PIXELS_PER_IMAGE
 from src.data.dataset import AffectNetDatasetValidation
 
-PIXELS_IMAGE = 256 * 256
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--datasplits', type=str, default='all', help='The datasplits that will be usen to compute the metrics')
+    parser.add_argument('--datasplits', type=str, default='default', help='The datasplits that will be usen to compute the metrics')
     return parser.parse_args() 
+
 
 def main():
     # Compute metrics for the specified datasplits
     args = parse_args()
-    if args.datasplits == 'all':
+    if args.datasplits == 'default':
+        datasplits = ['train', 'val']
+    elif args.datasplits == 'all':
         datasplits = ['train', 'val', 'test']
     elif args.datasplits == 'train':
         datasplits = ['train']
@@ -54,7 +56,7 @@ def main():
             psum_sq += (imgs**2).sum(axis=[0, 2, 3])
 
     # Compute final metrics
-    pixel_count = count * PIXELS_IMAGE
+    pixel_count = count * PIXELS_PER_IMAGE
     total_mean = psum / pixel_count
     total_var = (psum_sq / pixel_count) - (total_mean**2)
     total_std = torch.sqrt(total_var)
