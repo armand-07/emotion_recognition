@@ -1,0 +1,23 @@
+preprocessing:
+  random_seed: 33
+  orig_datasets: ["affectnet"]
+  train_split: 0.8 # val size split would be 1 - train_split
+  categorical_format: "hard_label" # Apply Gumbel-Softmax y_soft = F.gumbel_softmax(logits, tau=0.5)
+  continuous_format: "cartesian"
+  face_detection_algorithm: "None" #"Haar Cascade Classifier"
+
+model:
+  random_seed: 33
+  image_norm: True
+  data_augmentation: True
+  algorithm_name: "Hubert_Classifier"
+  random_state: 33 #seed for reproducibility
+  batch_size: 256 # training and valid batch size
+  lr: 0.0001 # learning rate
+  momentum: 0.9 # SGD momentum, for SGD only
+  optimizer: 'adam' # optimization method: sgd | adam
+  adapter_hidden_size: 128 # model hyperparameter
+  epochs: 20  # maximum number of epochs to train
+  patience: 5 # how many epochs of no loss improvement should we wait before stop training
+  log_interval: 15 # how many batches to wait before logging training status
+  

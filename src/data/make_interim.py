@@ -6,11 +6,11 @@ import scipy.io
 import os
 import shutil
 
-from src import RAW_DATA_DIR, INTERIM_DATA_DIR, INTERIM_COLUMNS
+from src import RAW_DATA_DIR, RAW_AFFECTNET_DIR, INTERIM_DATA_DIR, INTERIM_AFFECTNET_DIR, INTERIM_COLUMNS_PAMI, INTERIM_COLUMNS_AFFECTNET
 
 
 
-def process_interim_annotations(data, datasplit):
+def pami_process_interim_annotations(datasplit, data):
     """ Process annotations from mat file format to pandas DataFrame for given data split
     """
     data_annotations = [] # List of dictionaries with the annotations
@@ -18,7 +18,7 @@ def process_interim_annotations(data, datasplit):
         data_sample = data[id_key] # Get sample of the dataset
 
         # Get the image's filename, size and original database
-        path = data_sample[1][0].split("/")[0]+"/"+data_sample[0][0] # data_sample[1][0] is the folder name and data_sample[0][0] is the filename, I delete images intermediate folder
+        path = os.path.join(RAW_DATA_DIR, 'PAMI', 'emotic', 'emotic', data_sample[1][0].split("/")[0], 'images', data_sample[0][0]) # data_sample[1][0] is the folder name and data_sample[0][0] is the filename, I delete images intermediate folder
         img_size = [int(data_sample[2][0][0][0][0][0]), int(data_sample[2][0][0][1][0][0])]
         orig_db = data_sample[3][0][0][0][0]
 
@@ -68,63 +68,76 @@ def process_interim_annotations(data, datasplit):
         annotation_key = {'path': path, 'orig_db': orig_db, 'img_size': img_size,
         'people': people, 'bbox': bbox, 'label_cat': label_cat, 'label_cont': label_cont, 'gender': gender, 'age':age}
         data_annotations.append(annotation_key)
-    return pd.DataFrame(data_annotations, columns = INTERIM_COLUMNS)
+    return pd.DataFrame(data_annotations, columns = INTERIM_COLUMNS_PAMI)
 
 
-def copy_photos_to_interim(orig_data = RAW_DATA_DIR):
-    """ Copy photos from raw to interim folder
-    """
-    source_folder = os.path.join(orig_data, 'PAMI', 'emotic', 'emotic')
 
-    # Fetch all dataset directories
-    for dataset_name in os.listdir(source_folder):
-        # Construct full dataset directory path
-        dataset_folder = os.path.join(source_folder, dataset_name, 'images')
-        destination_folder = os.path.join(INTERIM_DATA_DIR, 'images', dataset_name)
-        if not os.path.exists(destination_folder):
-            os.makedirs(destination_folder)
+def affectnet_process_interim_annotations(id_list, datasplit_path):
+    """ Process annotations from mat file format to pandas DataFrame for validation and train"""
 
-        # Check if it is a directory
-        if os.path.isdir(dataset_folder):
-            for file_name in os.listdir(dataset_folder):
-                # Copy only .jpg photos
-                if os.path.isfile(os.path.join(dataset_folder, file_name)) and file_name.endswith('.jpg'):
-                    source = os.path.join(dataset_folder, file_name)
-                    destination = os.path.join(destination_folder, file_name)
-                    shutil.copy(source, destination)
+    data_annotations = [] # List of dictionaries with the annotations
+    annot_proccessed = 0
+    for id in id_list:
+        exp = int(np.load(os.path.join(datasplit_path, "annotations", id + "_" + 'exp' + ".npy")))
+        valence = float(np.load(os.path.join(datasplit_path, "annotations", id + "_" + 'val' + ".npy")))
+        arousal = float(np.load(os.path.join(datasplit_path, "annotations", id + "_" + 'aro' + ".npy")))
+        id_image_path = os.path.join(datasplit_path, "images", id + ".jpg")
+
+        annotation_key = {'path': id_image_path, 'cat_emot': exp, 'valence': valence, 'arousal': arousal}
+        data_annotations.append(annotation_key)
+
+        if annot_proccessed % 10000 == 0:
+            print("Annotations processed:", annot_proccessed)
+        annot_proccessed += 1
+    return pd.DataFrame(data_annotations, columns = INTERIM_COLUMNS_AFFECTNET)
+
 
 
 def main():
-    """ Runs data processing scripts to turn raw data from (data/raw) into
-        interim data ready to be preprocessed and make data explotation 
-        (saved in data/interim).
+    """ Runs data processing scripts to turn raw data from ../data/raw into
+        interim data ready to make data explotation saved in ../data/interim.
     """
     # Delete the interim folder if it exists to clean creation of new data
     if os.path.exists(INTERIM_DATA_DIR):
         shutil.rmtree(INTERIM_DATA_DIR)
+    if os.path.exists(INTERIM_AFFECTNET_DIR):
+        shutil.rmtree(INTERIM_AFFECTNET_DIR)
 
-    os.makedirs(INTERIM_DATA_DIR)
+    os.makedirs(INTERIM_DATA_DIR); os.makedirs(INTERIM_AFFECTNET_DIR)
     os.makedirs(os.path.join(INTERIM_DATA_DIR, "annotations"))
+    os.makedirs(os.path.join(INTERIM_AFFECTNET_DIR, "annotations"))
 
 
-
-    # Load the dataset
+    # Load the PAMI dataset
     mat_path = os.path.join(RAW_DATA_DIR, 'PAMI', 'annotations', 'Annotations.mat')
     mat = scipy.io.loadmat(mat_path)
-    print("---------- Generating interim dataset annotations ------------")
+    print("---------- Generating PAMI interim dataset annotations ------------")
     print("Matlab information:", mat['__header__'])
-
 
     for datasplit in mat.keys():
         if datasplit in ['test', 'train', 'val']:
-            print("Working on data split:", datasplit)
-            dataframe_anotations = process_interim_annotations(mat[datasplit][0], datasplit)
+            print("Working on PAMI data split:", datasplit)
+            dataframe_anotations = pami_process_interim_annotations(datasplit, mat[datasplit][0])
             print("Total entries:", dataframe_anotations.shape[0])
             dataframe_anotations.to_pickle(os.path.join(INTERIM_DATA_DIR, "annotations", datasplit + '.pkl'))
-
-    # Copy photos to interim folder
-    print("---------- Copying photos to interim folder ------------")
-    copy_photos_to_interim()
+    
+    # Load the AffectNet dataset
+    print("---------- Generating AffectNet interim dataset annotations ------------")
+    directories = [d for d in os.listdir(RAW_AFFECTNET_DIR) if os.path.isdir(os.path.join(RAW_AFFECTNET_DIR, d))]
+    print("AffectNet data splits:", directories)
+    for datasplit in directories:
+        datasplit_path = os.path.join(RAW_AFFECTNET_DIR, datasplit)
+        file_list_split = os.listdir(os.path.join(datasplit_path, "annotations"))
+        id_list = set()
+        for file in file_list_split:
+            photo_idx = file.split("_")[0]
+            if photo_idx not in id_list:
+                id_list.add(photo_idx)
+        print("Working on AffectNet data split:", datasplit, "with a total of", len(id_list), "images")
+        dataframe_anotations = affectnet_process_interim_annotations(id_list, datasplit_path)
+        dataframe_anotations.to_pickle(os.path.join(INTERIM_AFFECTNET_DIR, "annotations", datasplit + '.pkl'))
     print("---------- Finished generating interim dataset annotations ------------")
+
+    
 if __name__ == '__main__':
     main()
