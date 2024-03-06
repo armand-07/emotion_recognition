@@ -90,3 +90,6 @@ config.py
 
 # Wandb
 wandb/
+
+# Models
+models/
