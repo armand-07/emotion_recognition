@@ -4,6 +4,8 @@ import math
 from src import AFFECTNET_CAT_EMOT, MODELS_DIR
 import pandas as pd
 import altair as alt
+import plotly.express as px
+import plotly.graph_objects as go
 import torch
 from torch.distributions import Categorical
 
@@ -24,25 +26,25 @@ def visualize_batch(img, cat_label = None, col = 8):
             ax.set_title(AFFECTNET_CAT_EMOT[np.argmax(cat_label[i]).item()], fontsize=10)
     plt.show()
 
-def store_conf_matrix(conf_matrix):
-    # Convert confusion matrix to dataframe
-    conf_matrix_df = pd.DataFrame(conf_matrix, columns=AFFECTNET_CAT_EMOT, index=AFFECTNET_CAT_EMOT)
-
-    # Reshape dataframe for plotting
-    conf_matrix_df = conf_matrix_df.stack().reset_index()
-    conf_matrix_df.columns = ['True Emotion', 'Predicted Emotion', 'Percentage']
-
-    # Plot confusion matrix
-    confusion_matrix = alt.Chart(conf_matrix_df).mark_rect().encode(
-        x='Predicted Emotion:O',
-        y='True Emotion:O',
-        color=('Percentage:Q', alt.Scale(scheme='darkgold'))
-    ).properties(
-        title='Confusion Matrix of Categorical Emotions',
-        width=500,
-        height=500
+def create_conf_matrix(conf_matrix):
+    """Create a confusion matrix using the plotly library."""
+    fig = px.imshow(conf_matrix,
+                labels=dict(y="True Emotion", x="Predicted Emotion", color="Percentage"),
+                x=AFFECTNET_CAT_EMOT,
+                y=AFFECTNET_CAT_EMOT,
+                color_continuous_scale='Blues',
+                zmin = 0.0,
+                zmax = 1.0,
+               )
+    fig.update_xaxes(side="top", tickangle=0, title_font=dict(size=14), tickfont=dict(size=9))
+    fig.update_yaxes(tickangle=0, title_font=dict(size=14), tickfont=dict(size=9))
+    fig.update_layout(
+    coloraxis_colorbar=dict(thickness=15, len = 0.8)
     )
-    confusion_matrix.save(MODELS_DIR + 'confusion_matrix.json')
+    fig.update_traces(
+    hovertemplate='True Emotion: %{y}<br>Predicted Emotion: %{x}<br>Percentage: %{z:.4f}<extra></extra>'
+    )
+    return fig
 
 
 def compute_cat_label_batch_entropy(dataloader, NUMBER_OF_EMOT, title = 'Entropy through all batches'):

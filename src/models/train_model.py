@@ -6,7 +6,7 @@ import os
 import time
 import shutil
 import hashlib
-import json
+from PIL import Image
 
 
 
@@ -173,7 +173,8 @@ def validate(
         model: torch.nn.Module, 
         criterion: torch.nn, 
         device: torch.device,
-        epoch: int
+        epoch: int,
+        params: dict
         ) -> np.float32:
 
     # Switch model to evaluate mode
@@ -186,7 +187,7 @@ def validate(
     global_epoch_loss = 0.0
 
     with torch.no_grad():  #There is no need to compute gradients
-        for i, (imgs, cat_target, cont_target) in tqdm(enumerate(val_loader), total=len(val_loader), desc = f'Epoch{epoch+1}: VAL'):
+        for i, (imgs, cat_target, cont_target) in tqdm(enumerate(val_loader), total=len(val_loader), desc = f'(VAL)Epoch {epoch+1}'):
             # Move images to gpu
             imgs = imgs.to(device)
             cat_target = cat_target.to(device)
@@ -206,15 +207,14 @@ def validate(
             all_preds = torch.cat((all_preds, torch.argmax(prediction, dim=1).cpu())) # Get the predicted labels using argmax
             all_targets = torch.cat((all_targets, cat_target.cpu()))
             
-            if i % 50 == 0:
+            if i % params['step_log_interval'] == 0:
                 tqdm.write(f'VAL [{i+1}/{len(val_loader)}] F1-score {f1_scores[i].item():.3f} Loss {loss.item():.3f}')
                 #wandb.log({'Val loss step evolution': loss.item()}, step=epoch+(i+1/len(val_loader)))
                 #wandb.log({'Val F1 Score step evolution': f1_scores[i].item()}, step=epoch+(i+1/len(val_loader)))
+    
     conf_matrix = confusion_matrix(all_targets.numpy(), all_preds.numpy(), normalize = 'true')
-    vis.store_conf_matrix(conf_matrix)
-    # Opening JSON file
-    chartjson = json.load(open(MODELS_DIR + 'confusion_matrix.json'))
-    wandb.log({'Confusion Matrix': wandb.plot(chartjson), 'step': epoch+1})
+    chart = vis.create_conf_matrix(conf_matrix)
+    wandb.log({'Confusion Matrix': chart}, step = epoch+1)
 
     return torch.mean(f1_scores).item(), global_epoch_loss / len(val_loader.dataset)
 
@@ -274,9 +274,7 @@ def main(params):
     config=config,
     name=f'run_{num_run}',
     )
-
     #wandb.watch(model, log_freq=100) # use wandb.watch with a log_freq=100.
-
     # Define the training parameters
     best_f1_score = 0.0
     best_epoch = 0
@@ -289,7 +287,7 @@ def main(params):
         #wandb.log({"Train F1-Score mean per epoch": mean_loss_train}, step=epoch+1)
         #wandb.log({"Train loss mean per epoch": mean_f1_score_train}, step=epoch+1)
 
-        mean_f1_score_val, mean_loss_val = validate(dataloader_val, model, criterion, device, epoch)
+        mean_f1_score_val, mean_loss_val = validate(dataloader_val, model, criterion, device, epoch, params)
         wandb.log({"Val F1-Score mean per epoch": mean_f1_score_val}, step=epoch+1)
         wandb.log({"Val loss mean per epoch": mean_loss_val}, step=epoch+1)
 
@@ -307,7 +305,7 @@ def main(params):
             'params': params,
         }, is_best)
 
-        if best_epoch - epoch == params['patience']:
+        if epoch - best_epoch == params['patience']:
             print(f'Early stopping at epoch {epoch}')
             t1 = time.time()
             print(f'Training time: {t1-t0:.2f} seconds')
@@ -315,10 +313,10 @@ def main(params):
 
     wandb.finish()
 
+
 if __name__ == '__main__':
     # Path of the parameters file
     params_path = Path("params.yaml")
-
     # Read data preparation parameters
     with open(params_path, "r", encoding='utf-8') as params_file:
         try:
@@ -326,5 +324,4 @@ if __name__ == '__main__':
             params = params["training"]
         except yaml.YAMLError as exc:
             print(exc)
-
     main(params)
