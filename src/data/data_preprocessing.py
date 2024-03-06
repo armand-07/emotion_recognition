@@ -25,8 +25,8 @@ def data_generator(data, params):
         img_path = sample['path']
         id = idx # Get the id of the image as a range, not based on original archive based id
         
-        # Get the encoding of the categorical emotion
-        cat_emot = cat2one_hot(sample['cat_emot'], number_of_classes, params['categorical_format'])
+        # Get the index of sample's categorical emotion
+        cat_emot = torch.tensor(sample['cat_emot'], dtype=torch.int64)
 
         # Get the encoding of the continuous emotions
         cont_emot = torch.tensor([sample['valence'], sample['arousal']])

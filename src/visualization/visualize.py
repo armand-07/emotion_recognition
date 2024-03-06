@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import math
-from src import AFFECTNET_CAT_EMOT
+from src import AFFECTNET_CAT_EMOT, MODELS_DIR
 import pandas as pd
 import altair as alt
 import torch
@@ -23,6 +23,26 @@ def visualize_batch(img, cat_label = None, col = 8):
         if cat_label is not None:
             ax.set_title(AFFECTNET_CAT_EMOT[np.argmax(cat_label[i]).item()], fontsize=10)
     plt.show()
+
+def store_conf_matrix(conf_matrix):
+    # Convert confusion matrix to dataframe
+    conf_matrix_df = pd.DataFrame(conf_matrix, columns=AFFECTNET_CAT_EMOT, index=AFFECTNET_CAT_EMOT)
+
+    # Reshape dataframe for plotting
+    conf_matrix_df = conf_matrix_df.stack().reset_index()
+    conf_matrix_df.columns = ['True Emotion', 'Predicted Emotion', 'Percentage']
+
+    # Plot confusion matrix
+    confusion_matrix = alt.Chart(conf_matrix_df).mark_rect().encode(
+        x='Predicted Emotion:O',
+        y='True Emotion:O',
+        color=('Percentage:Q', alt.Scale(scheme='darkgold'))
+    ).properties(
+        title='Confusion Matrix of Categorical Emotions',
+        width=500,
+        height=500
+    )
+    confusion_matrix.save(MODELS_DIR + 'confusion_matrix.json')
 
 
 def compute_cat_label_batch_entropy(dataloader, NUMBER_OF_EMOT, title = 'Entropy through all batches'):
