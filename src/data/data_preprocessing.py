@@ -75,7 +75,7 @@ def data_preprocessing_affectnet(params):
     annotations_path = Path(os.path.join(INTERIM_AFFECTNET_DIR, 'annotations'))
 
     # Process the training data
-    print("------------- Processing training data ----------------")
+    print(f"Processing Training data to -> train/validation ({params['train_split']}/ {1 - params['train_split']})")
     file = os.path.join(annotations_path, 'train_set.pkl')
     data = pd.read_pickle(file)
     # Split the DataFrame into training and validation sets
@@ -85,7 +85,7 @@ def data_preprocessing_affectnet(params):
     store_data_split(val_data, 'val', params)
 
     # Process the validation data
-    print("------------- Processing validation data ----------------")
+    print("Processing Training data to -> test")
     file = os.path.join(annotations_path, 'val_set.pkl')
     test_data = pd.read_pickle(file)
     store_data_split(test_data, 'test', params) # Save val split as test split

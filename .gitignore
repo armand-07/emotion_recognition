@@ -93,3 +93,4 @@ wandb/
 
 # Models
 models/
+models/model_best.pt

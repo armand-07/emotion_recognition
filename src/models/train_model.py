@@ -19,7 +19,7 @@ from torcheval.metrics.functional import multiclass_f1_score
 import torchvision.transforms.v2 as transforms
 
 from codecarbon import EmissionsTracker
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, top_k_accuracy_score, cohen_kappa_score
 import wandb
 
 import numpy as np
@@ -28,6 +28,7 @@ import random
 from src import PROCESSED_AFFECTNET_DIR, NUMBER_OF_EMOT, MODELS_DIR, AFFECTNET_CAT_EMOT
 from src.data.dataset import AffectNetDataset
 from src.models import archirectures as arch
+from src.models.metrics import compute_ROC_AUC_OVR
 from src.visualization import visualize as vis
 
 from config import wandbAPIkey
@@ -74,18 +75,16 @@ def data_loading(params):
     val_weights = torch.load(os.path.join(PROCESSED_AFFECTNET_DIR, "data_weights_val.pt"))
     if params['epoch_samples'] == None:
         epoch_train_size = len(dataset_train)
-        epoch_val_size = len(dataset_val)
     else:
         epoch_train_size = params['epoch_samples']
-        epoch_val_size = params['epoch_samples']
     # Load sampler
     sampler_train = WeightedRandomSampler(train_weights,epoch_train_size, replacement=True)
-    sampler_val = WeightedRandomSampler(val_weights, epoch_val_size, replacement=True)
+    sampler_val = WeightedRandomSampler(val_weights,1000, replacement=True)
     # Create dataloaders
     dataloader_train = DataLoader(dataset_train, batch_size=params['batch_size'], 
                                 pin_memory=True, sampler=sampler_train, drop_last=True)
     dataloader_val = DataLoader(dataset_val, batch_size=params['batch_size'], 
-                                pin_memory=True, sampler=sampler_val, drop_last=True)
+                                pin_memory=True, sampler = sampler_val, drop_last=True)
     return dataloader_train, dataloader_val
 
 
@@ -136,12 +135,12 @@ def train(
         device: torch.device,
         epoch: int,
         params: dict
-        ) -> Tuple[np.float32, np.float32]:
+        ) -> None:
 
     # Switch to train mode
     model.train()
     # I will save the values of the accuracies in this list to return the mean of the whole dataset at the end
-    f1_scores = torch.empty(len(train_loader), dtype=torch.float32, device = 'cpu')
+    acc = torch.zeros(1, dtype=torch.int, device = device)
     global_epoch_loss = 0.0
     
     for i, (imgs, cat_target, cont_target) in tqdm(enumerate(train_loader), total=len(train_loader), desc = f'Epoch{epoch+1}: TRAIN'):
@@ -153,20 +152,29 @@ def train(
 
         # Forward batch of images through the network
         prediction = model(imgs)
+        predicted_label = torch.argmax(prediction, dim=1)
         # Compute the loss
         loss = criterion(prediction, cat_target)
         # Compute gradient and optimize weights
         loss.backward()
         optimizer.step()
-
-        # Measure F1-score
-        f1_scores[i] = multiclass_f1_score(input=prediction, target=cat_target, num_classes=NUMBER_OF_EMOT).cpu()
+        # Measure accuracy and loss
+        acc += torch.sum(predicted_label == cat_target)
         global_epoch_loss += loss.data.item()*params['batch_size'] # Accumulate the loss
         if i % params['step_log_interval'] == 0:
-            tqdm.write(f'TRAIN [{i+1}/{len(train_loader)}] F1-score {f1_scores[i].item():.3f} Loss {loss.item():.3f}')
+            acc_batch = torch.sum(predicted_label == cat_target).item()/params['batch_size']*100
+            tqdm.write(f"TRAIN [{i+1}/{len(train_loader)}], Batch accuracy: {acc_batch:.3f}%; Batch Loss: {loss.item():.3f}")
             #wandb.log({'Train loss step evolution': loss.item()}, step=epoch+(i+1/len(train_loader)))
             #wandb.log({'Train F1 Score step evolution': f1_scores[i].item()}, step=epoch+(i+1/len(train_loader)))
-    return torch.mean(f1_scores).item(), global_epoch_loss/len(train_loader.dataset)
+    # Reset gradients
+    optimizer.zero_grad()
+
+    # Compute the metrics
+    acc = acc/(len(train_loader) * params['batch_size'])
+    global_epoch_loss = global_epoch_loss / (len(train_loader) * params['batch_size'])
+    wandb.log({"Train accuracy per epoch": acc}, step=epoch+1)
+    wandb.log({"Train loss mean per epoch": global_epoch_loss}, step=epoch+1)
+
 
 def validate(
         val_loader: torch.utils.data.DataLoader, 
@@ -181,10 +189,13 @@ def validate(
     model.eval()
 
     # I will save the values of the accuracies in this list to return the mean of the whole dataset at the end
-    f1_scores = torch.empty(len(val_loader), dtype=torch.float32)
-    all_preds = torch.empty(0, device = 'cpu')
+    acc1 = torch.zeros(1, dtype=torch.int, device = device)
+    all_preds_labels = torch.empty(0, device = 'cpu')
+    all_preds_dist = torch.empty(0, device = 'cpu')
+    softmax = nn.Softmax(dim=1)
     all_targets = torch.empty(0, device = 'cpu')
     global_epoch_loss = 0.0
+    
 
     with torch.no_grad():  #There is no need to compute gradients
         for i, (imgs, cat_target, cont_target) in tqdm(enumerate(val_loader), total=len(val_loader), desc = f'(VAL)Epoch {epoch+1}'):
@@ -194,29 +205,54 @@ def validate(
 
             # Forward batch of images through the network
             prediction = model(imgs)
+            predicted_label = torch.argmax(prediction, dim=1) # Get the predicted labels using argmax
+            
             # Compute the loss
             loss = criterion(prediction, cat_target)
-            # Measure F1-score
-            # Input (Tensor) – Tensor of label predictions. It could be the predicted labels, with shape of (n_sample, ). 
-            # It could also be probabilities or logits with shape of (n_sample, n_class). torch.argmax will be used to convert input into predicted labels.
-            # target (Tensor) – Tensor of ground truth labels with shape of (n_sample, ).
-            f1_scores[i] = multiclass_f1_score(input=prediction, target=cat_target, num_classes=NUMBER_OF_EMOT).item()
+            # Measure metrics
+            acc1 += torch.sum(predicted_label == cat_target)
+            
             global_epoch_loss += loss.data.item()*imgs.shape[0] # Accumulate the loss
 
             # PREDS ARE IN LOGITS NO IN PROBABILITY
-            all_preds = torch.cat((all_preds, torch.argmax(prediction, dim=1).cpu())) # Get the predicted labels using argmax
+            all_preds_labels = torch.cat((all_preds_labels, predicted_label.cpu())) 
+            all_preds_dist = torch.cat((all_preds_dist, softmax(prediction).cpu())) # Apply softmax to the predictions
             all_targets = torch.cat((all_targets, cat_target.cpu()))
             
             if i % params['step_log_interval'] == 0:
-                tqdm.write(f'VAL [{i+1}/{len(val_loader)}] F1-score {f1_scores[i].item():.3f} Loss {loss.item():.3f}')
+                acc_batch = torch.sum(predicted_label == cat_target).item()/params['batch_size']*100
+                tqdm.write(f'VAL [{i+1}/{len(val_loader)}], Batch accuracy: {acc_batch:.2f}%; Batch Loss: {loss.item():.3f}')
                 #wandb.log({'Val loss step evolution': loss.item()}, step=epoch+(i+1/len(val_loader)))
                 #wandb.log({'Val F1 Score step evolution': f1_scores[i].item()}, step=epoch+(i+1/len(val_loader)))
+
+    # Compute the metrics
+    acc1 = acc1.item()/(len(val_loader) * params['batch_size']) # Log the accuracy
+    acc2 = top_k_accuracy_score(all_targets.numpy(), all_preds_dist.numpy(), k=2, normalize=True) # Log the top-2 accuracy
+    global_epoch_loss = global_epoch_loss /(len(val_loader) * params['batch_size']) # Mean loss
+    f1_score = multiclass_f1_score(input=all_preds_labels, target=all_targets, num_classes=NUMBER_OF_EMOT).item() # F1-Score
+    cohen_kappa = cohen_kappa_score(all_targets, all_preds_labels) # Cohen Kappa coefficient
+
+    # Log the metrics
+    wandb.log({"Val accuracy per epoch": acc1}, step=epoch+1)
+    wandb.log({"Val top-2 accuracy per epoch": acc2}, step=epoch+1)
+    wandb.log({"Val global mean loss per epoch ": global_epoch_loss}, step=epoch+1)
+    wandb.log({"Val F1-Score per epoch": f1_score}, step=epoch+1)
+    wandb.log({"Val Cohen Kappa coefficient per epoch": cohen_kappa}, step=epoch+1)
     
-    conf_matrix = confusion_matrix(all_targets.numpy(), all_preds.numpy(), normalize = 'true')
+    # ROC AUC score with OvR strategy
+    chart, roc_auc_per_label, roc_auc_ovr= compute_ROC_AUC_OVR(all_targets, all_preds_dist, AFFECTNET_CAT_EMOT)
+    wandb.log({'Plot ROC AUC score with OvR strategy':  wandb.Image(chart)}, step = epoch+1)
+    #wandb.log({'Area Under the (ROC AUC) Curve per label': roc_auc_per_label}, step = epoch+1)
+    wandb.log({'Area Under the (ROC AUC) Curve OvR': roc_auc_ovr}, step = epoch+1)
+
+    
+
+    # Log the confusion matrix
+    conf_matrix = confusion_matrix(all_targets.numpy(), all_preds_labels.numpy(), normalize = 'true')
     chart = vis.create_conf_matrix(conf_matrix)
     wandb.log({'Confusion Matrix': chart}, step = epoch+1)
 
-    return torch.mean(f1_scores).item(), global_epoch_loss / len(val_loader.dataset)
+    return f1_score
 
 
 def save_checkpoint(
@@ -279,22 +315,18 @@ def main(params):
     best_f1_score = 0.0
     best_epoch = 0
 
-    # Training with early stopping if patience threshold is surpassed
+    
     t0 = time.time()
 
     for epoch in range(params['epochs']):
-        #mean_f1_score_train, mean_loss_train  = train(dataloader_train, model, criterion, optimizer, device, epoch, params)
-        #wandb.log({"Train F1-Score mean per epoch": mean_loss_train}, step=epoch+1)
-        #wandb.log({"Train loss mean per epoch": mean_f1_score_train}, step=epoch+1)
-
-        mean_f1_score_val, mean_loss_val = validate(dataloader_val, model, criterion, device, epoch, params)
-        wandb.log({"Val F1-Score mean per epoch": mean_f1_score_val}, step=epoch+1)
-        wandb.log({"Val loss mean per epoch": mean_loss_val}, step=epoch+1)
+        #train(dataloader_train, model, criterion, optimizer, device, epoch, params)
+        
+        f1_score_val = validate(dataloader_val, model, criterion, device, epoch, params)
 
         # Remember best f1-score and save checkpoint
-        if mean_f1_score_val > best_f1_score:
+        if f1_score_val > best_f1_score:
             is_best = True
-            best_f1_score = mean_f1_score_val
+            best_f1_score = f1_score_val
             best_epoch = epoch
 
         save_checkpoint({
@@ -305,12 +337,14 @@ def main(params):
             'params': params,
         }, is_best)
 
+        # Training with early stopping if patience threshold is archieved
         if epoch - best_epoch == params['patience']:
-            print(f'Early stopping at epoch {epoch}')
+            print(f'Early stopping at epoch {epoch+1}')
             t1 = time.time()
             print(f'Training time: {t1-t0:.2f} seconds')
             break
-
+    wandb.add_artifact(os.path.join(MODELS_DIR, 'checkpoint.pt'), "Chosen model")
+    wandb.add_artifact(best_f1_score, "Best F1-Score model")
     wandb.finish()
 
 

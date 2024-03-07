@@ -10,13 +10,13 @@ training:
   data_augmentation: "None"
   image_norm: "ImageNet"
   arch: "ResNet50" # architecture name 
-  batch_size: 64 # training and valid batch size
+  batch_size: 128 # training and valid batch size
   epoch_samples: 1000 # number of samples considered as one epoch, if None, the whole dataset length is considered
   lr: '1e-5' # learning rate
   momentum: 0.9 # SGD momentum, for SGD only
   optimizer: 'adam' # optimization method: sgd | adam
   epochs: 20  # maximum number of epochs to train
   patience: 5 # how many epochs of no loss improvement should we wait before stop training
-  step_log_interval: 10 # how many batches to wait before logging training status
+  step_log_interval: 50 # how many batches to wait before logging training status
   
   
