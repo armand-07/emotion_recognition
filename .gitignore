@@ -94,3 +94,6 @@ wandb/
 # Models
 models/
 models/model_best.pt
+
+# Ignore Slurm output terminal history
+*.out

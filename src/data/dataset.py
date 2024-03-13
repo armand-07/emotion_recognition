@@ -20,15 +20,13 @@ class AffectNetDataset(Dataset):
         data = self.annotations.iloc[idx]
         img = cv2.imread(data[PROCESSED_COLUMNS[1]])        # In BGR format
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)          # Convert from BGR to RGB
-        tensor_img = transforms.ToImage()(img)              # Convert numpy to a tensor, from [H,W,C] to [C,H,W] format
-
-        if self.img_transforms:
-            tensor_img = self.img_transforms(tensor_img)    # Apply transformations to the image
+        if self.img_transforms is not None:
+            img = self.img_transforms(image=img)["image"]
 
         cat_label = data[PROCESSED_COLUMNS[2]]
         cont_label = data[PROCESSED_COLUMNS[3]]
 
-        return tensor_img, cat_label, cont_label            # Return the image and the continuous and categorical labels
+        return img, cat_label, cont_label            # Return the image and the continuous and categorical labels
     
 
 class AffectNetDatasetValidation(Dataset):
@@ -44,12 +42,10 @@ class AffectNetDatasetValidation(Dataset):
         id = data[PROCESSED_COLUMNS[0]]                     # Get the id of the image
         img = cv2.imread(data[PROCESSED_COLUMNS[1]])        # In BGR format
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)          # Convert from BGR to RGB
-        tensor_img = transforms.ToImage()(img)              # Convert numpy to a tensor, from [H,W,C] to [C,H,W] format
-
-        if self.img_transforms:
-            tensor_img = self.img_transforms(tensor_img)    # Apply transformations to the image
+        if self.img_transforms is not None:
+            img = self.img_transforms(image=img)["image"]
 
         cat_label = data[PROCESSED_COLUMNS[2]]
         cont_label = data[PROCESSED_COLUMNS[3]]
 
-        return id, tensor_img, cat_label, cont_label        # Return the image and the continuous and categorical labels
+        return id, img, cat_label, cont_label        # Return the image and the continuous and categorical labels

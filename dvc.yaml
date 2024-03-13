@@ -1,8 +1,0 @@
-stages:
-  interim:
-    cmd: python -m src.data.make_interim
-    deps:
-    - data/raw/
-    - src/data/make_interim.py
-    outs:
-    - data/interim/
