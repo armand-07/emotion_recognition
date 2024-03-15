@@ -23,6 +23,5 @@ INTERIM_COLUMNS_PAMI = ['path','orig_db', 'img_size', 'people', 'bbox', 'label_c
 INTERIM_COLUMNS_AFFECTNET = ['path', 'cat_emot', 'valence', 'arousal']
 
 # Define columns for the processed labels and processed properties
-PROCESSED_COLUMNS = ['key', 'img_path', 'cat_emot', 'cont_emot'] # represents the processed image, the categorical emotion and the continuous emotion
 PIXELS_PER_IMAGE = 224 * 224
 

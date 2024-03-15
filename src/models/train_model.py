@@ -82,9 +82,9 @@ def data_loading(params):
     train_transforms, val_transforms = data_transforms(params)
 
     # Create the datasets
-    dataset_train = AffectNetDataset(annotations_path=os.path.join(PROCESSED_AFFECTNET_DIR, "train.pkl"),
+    dataset_train = AffectNetDataset(path=PROCESSED_AFFECTNET_DIR, datasplit = "train",
                                     img_transforms=train_transforms)
-    dataset_val = AffectNetDataset(annotations_path=os.path.join(PROCESSED_AFFECTNET_DIR, "val.pkl"),
+    dataset_val = AffectNetDataset(path=PROCESSED_AFFECTNET_DIR, datasplit = "val",
                                     img_transforms=val_transforms)
     # Load weights
     train_weights = torch.load(os.path.join(PROCESSED_AFFECTNET_DIR, "data_weights_train.pt"))
@@ -98,9 +98,9 @@ def data_loading(params):
     #sampler_val = WeightedRandomSampler(val_weights, 1000, replacement=True)
     # Create dataloaders
     dataloader_train = DataLoader(dataset_train, batch_size=params['batch_size'], 
-                                pin_memory=True, sampler=sampler_train, drop_last=True, num_workers=2)
+                                pin_memory=True, sampler=sampler_train, drop_last=True, num_workers=4)
     dataloader_val = DataLoader(dataset_val, batch_size=params['batch_size'], 
-                                pin_memory=True, shuffle=True, drop_last=True, num_workers=2)
+                                pin_memory=True, shuffle=True, drop_last=True, num_workers=4)
     return dataloader_train, dataloader_val
 
 
@@ -153,7 +153,7 @@ def model_creation(params):
 
 
 def train(
-        train_loader: torch.utils.data.DataLoader, 
+        train_loader: DataLoader, 
         model: torch.nn.Module, 
         criterion: torch.nn, 
         optimizer: torch.optim, 
@@ -206,7 +206,7 @@ def train(
 
 
 def validate(
-        val_loader: torch.utils.data.DataLoader, 
+        val_loader: DataLoader, 
         model: torch.nn.Module, 
         criterion: torch.nn, 
         device: torch.device,
@@ -229,7 +229,7 @@ def validate(
     with torch.no_grad():  #There is no need to compute gradients
         for i, (imgs, cat_target, _) in tqdm(enumerate(val_loader), 
                                                        total=len(val_loader), desc = f'(VAL)Epoch {epoch+1}', 
-                                                        miniters=int(len(val_loader)/50)):
+                                                        miniters=int(len(val_loader)/100)):
             # Move images to gpu
             imgs = imgs.to(device)
             cat_target = cat_target.to(device)
@@ -250,7 +250,7 @@ def validate(
             all_preds_dist = torch.cat((all_preds_dist, softmax(prediction).cpu())) # Apply softmax to the predictions
             all_targets = torch.cat((all_targets, cat_target.cpu()))
             
-            if i % 50 == 0:
+            if i % 100 == 0:
                 acc_batch = torch.sum(predicted_label == cat_target).item()/params['batch_size']*100
                 tqdm.write(f'VAL [{i+1}/{len(val_loader)}], Batch accuracy: {acc_batch:.2f}%; Batch Loss: {loss.item():.3f}')
 
@@ -420,7 +420,8 @@ def main(mode, sweep_id):
             sweep_id = "armand-07"+"/"+"TFG Facial Emotion Recognition"+"/"+sweep_id
         # 4: Run the sweep agent
         wandb.agent(sweep_id, model_training, count = 1)
-    
+    else:
+        raise ValueError(f"Invalid mode parameter: {mode}")
 
 
 def parse_args():
@@ -428,7 +429,6 @@ def parse_args():
     parser.add_argument('--mode', type=str, default='default', help='The training mode to be sweep or standard run')
     parser.add_argument('--sweep_id', type=str, default=None, help='The sweep id to be used')
     return parser.parse_args() 
-
 
 
 if __name__ == '__main__':

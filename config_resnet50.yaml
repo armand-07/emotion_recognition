@@ -46,8 +46,8 @@ parameters:
       - "sgd"
     distribution: categorical
   momentum:
-    max: 1
-    min: 0.45
+    max: 0.99
+    min: 0.85
     distribution: uniform
   pretraining:
     values:

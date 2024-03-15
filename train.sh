@@ -4,4 +4,4 @@
 #SBATCH --mem 32G
 #SBATCH --gres=gpu:1
 #SBATCH --time 16:00:00 
-python -m src.models.train_model --mode default
+python -m src.models.train_model --mode sweep --sweep_id myao0mo6

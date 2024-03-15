@@ -3,7 +3,6 @@ preprocessing:
   orig_datasets: ["affectnet"]
   train_split: 0.8 # val size split would be 1 - train_split
   continuous_format: "cartesian"
-  face_detection_algorithm: "None" #"Haar Cascade Classifier"
 
 training:
   random_seed: 33 #seed for reproducibility
