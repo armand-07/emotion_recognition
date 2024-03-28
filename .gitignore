@@ -95,5 +95,8 @@ wandb/
 models/
 models/model_best.pt
 
+# Artifacts
+artifacts/
+
 # Ignore Slurm output terminal history
 *.out

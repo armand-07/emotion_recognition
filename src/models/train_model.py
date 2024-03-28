@@ -9,13 +9,10 @@ import argparse
 import torch
 from torch import nn
 from torch import optim
-import torch.nn.functional as F
-from torch.utils.data import DataLoader, WeightedRandomSampler
+from torch.utils.data import DataLoader
 from torcheval.metrics.functional import multiclass_f1_score
 from torcheval.metrics import MulticlassAccuracy
-import albumentations as A
-import cv2
-from albumentations.pytorch import ToTensorV2
+
 
 from codecarbon import EmissionsTracker
 from sklearn.metrics import confusion_matrix, top_k_accuracy_score, cohen_kappa_score
@@ -25,83 +22,13 @@ from wandb.sdk import wandb_run
 import numpy as np
 import random
 
-from src import PROCESSED_AFFECTNET_DIR, NUMBER_OF_EMOT, MODELS_DIR, AFFECTNET_CAT_EMOT
-from src.data.dataset import AffectNetDataset
+from src import NUMBER_OF_EMOT, MODELS_DIR, AFFECTNET_CAT_EMOT
+from src.data.dataset import create_dataloader
 from src.models import architectures as arch
 from src.models.metrics import compute_ROC_AUC_OVR
 from src.visualization import visualize as vis
 
 from config import wandbAPIkey
-
-
-
-def data_transforms(params):
-    # Convert the image to float32 and scale it to [0,1]
-    train_transforms = []
-    val_transforms = []
-    if params["daug_randomhorizontalflip"]:
-        train_transforms.append(A.HorizontalFlip(p=0.5))
-    if params["daug_colorjitter"]:
-        train_transforms.append(A.ColorJitter(brightness=[0.85, 1.15], 
-            contrast=[0.9,1.1], saturation=[0.75,1.1], hue=[-0.01,0.02], 
-            p = 0.5))
-    if params["daug_randomaffine"]:
-        train_transforms.append(A.ShiftScaleRotate(rotate_limit=(-15, 15), 
-            shift_limit=(0, 0.1), scale_limit=(-0.1, 0.1), 
-            border_mode = cv2.BORDER_CONSTANT, value = 0.0, p = 0.5))
-    if params["daug_randomerasing"]:
-        train_transforms.append(A.CoarseDropout(max_height=85, min_height = 16, 
-            max_width = 85, min_width = 16, fill_value = 0.0, max_holes = 1, 
-            min_holes = 1, p = 0.5))
-
-    # Normalize the image
-    if params["image_norm"].lower() == "imagenet":      # Normalize the image with the mean and std of the ImageNet dataset
-        train_transforms.append(A.Normalize(mean=[0.485, 0.456, 0.406], 
-            std=[0.229, 0.224, 0.225]))
-        val_transforms.append(A.Normalize(mean=[0.485, 0.456, 0.406], 
-            std=[0.229, 0.224, 0.225]))
-    elif params["image_norm"].lower() == "affectnet":   # Normalize the image with the mean and std of the AffectNet dataset
-        normalization_values = torch.load(
-            os.path.join (PROCESSED_AFFECTNET_DIR, 'dataset_normalization_values.pt'))
-        train_transforms.append(A.Normalize(mean=normalization_values['mean'], 
-            std=normalization_values['std']))
-        val_transforms.append(A.Normalize(mean=normalization_values['mean'], 
-            std=normalization_values['std']))
-    else:
-        raise ValueError(f"Invalid image_norm parameter: {params['image_norm']}")
-    
-    train_transforms.append(ToTensorV2())
-    val_transforms.append(ToTensorV2())
-    
-    # Convert the list of transforms to a Compose object
-    return A.Compose(train_transforms), A.Compose(val_transforms)
-
-
-
-def data_loading(params):
-    train_transforms, val_transforms = data_transforms(params)
-
-    # Create the datasets
-    dataset_train = AffectNetDataset(path=PROCESSED_AFFECTNET_DIR, datasplit = "train",
-                                    img_transforms=train_transforms)
-    dataset_val = AffectNetDataset(path=PROCESSED_AFFECTNET_DIR, datasplit = "val",
-                                    img_transforms=val_transforms)
-    # Load weights
-    train_weights = torch.load(os.path.join(PROCESSED_AFFECTNET_DIR, "data_weights_train.pt"))
-    #val_weights = torch.load(os.path.join(PROCESSED_AFFECTNET_DIR, "data_weights_val.pt"))
-    if params['epoch_samples'] == "original":
-        epoch_train_size = len(dataset_train)
-    else:
-        epoch_train_size = params['epoch_samples']
-    # Load sampler
-    sampler_train = WeightedRandomSampler(train_weights,epoch_train_size, replacement=True)
-    #sampler_val = WeightedRandomSampler(val_weights, 1000, replacement=True)
-    # Create dataloaders
-    dataloader_train = DataLoader(dataset_train, batch_size=params['batch_size'], 
-                                pin_memory=True, sampler=sampler_train, drop_last=True, num_workers=4)
-    dataloader_val = DataLoader(dataset_val, batch_size=params['batch_size'], 
-                                pin_memory=True, shuffle=True, drop_last=True, num_workers=4)
-    return dataloader_train, dataloader_val
 
 
 
@@ -117,38 +44,24 @@ def seed_everything(seed):
 
 
 
-def model_creation(params):
-    seed_everything(params['random_seed'])
-    # Create the model following the architecture specified in the parameters
-    if params['arch'].lower() == "resnet50":
-        pretrained = False
-        if params['pretraining'].lower() == 'imagenet':
-            pretrained = True
-        model = arch.resnet50(pretrained = pretrained)
-    elif params['arch'].lower() == "resnext50_32x4d":
-        model = arch.resnext50_32x4d(pretrained = True)
-
-    # We need GPU to train the model
-    assert torch.cuda.is_available()
-    print(f'Using CUDA with {torch.cuda.device_count()} GPUs')
-    print(f'Using CUDA device:{torch.cuda.get_device_name(torch.cuda.current_device())}')
-    # Move model to GPU
-    device = torch.device("cuda")
-    model.to(device)
-
+def define_criterion_optimizer(model, params):
     # Define criterion
     criterion = nn.CrossEntropyLoss(reduction = 'mean') # Note that this case is equivalent to the combination of LogSoftmax and NLLLoss.
     # Define optimizer
     if params["optimizer"].lower() == 'adam':
         optimizer = optim.Adam(model.parameters(), lr=float(params["lr"]))
+    elif params["optimizer"].lower() == 'adamw':
+        optimizer = optim.AdamW(model.parameters(), lr=float(params["lr"]))
     elif params["optimizer"].lower() == 'rmsprop':
         optimizer = optim.RMSprop(model.parameters(), lr=float(params["lr"]), momentum=float(params["momentum"]))
     elif params["optimizer"].lower() == 'sgd':
         optimizer = optim.SGD(model.parameters(), lr=float(params["lr"]), momentum=float(params["momentum"]))
+    elif params["optimizer"].lower() == 'none':
+        optimizer = None
     else:
         raise ValueError(f"Invalid optimizer parameter: {params['optimizer']}")
     
-    return model, criterion, optimizer, device
+    return criterion, optimizer
 
 
 
@@ -211,7 +124,7 @@ def validate(
         criterion: torch.nn, 
         device: torch.device,
         epoch: int,
-        params: dict,
+        batch_size: int,
         run: wandb_run.Run
         ) -> dict:
 
@@ -238,6 +151,7 @@ def validate(
             prediction = model(imgs)
             predicted_label = torch.argmax(prediction, dim=1) # Get the predicted labels using argmax
             
+            
             # Compute the loss
             loss = criterion(prediction, cat_target)
             # Measure metrics
@@ -251,13 +165,13 @@ def validate(
             all_targets = torch.cat((all_targets, cat_target.cpu()))
             
             if i % 100 == 0:
-                acc_batch = torch.sum(predicted_label == cat_target).item()/params['batch_size']*100
+                acc_batch = torch.sum(predicted_label == cat_target).item()/batch_size*100
                 tqdm.write(f'VAL [{i+1}/{len(val_loader)}], Batch accuracy: {acc_batch:.2f}%; Batch Loss: {loss.item():.3f}')
 
     # Compute the metrics
-    acc1 = acc1.item()/(len(val_loader) * params['batch_size']) # Log the accuracy
+    acc1 = acc1.item()/(len(val_loader) * batch_size) # Log the accuracy
     acc2 = top_k_accuracy_score(all_targets.numpy(), all_preds_dist.numpy(), k=2, normalize=True) # Log the top-2 accuracy
-    global_epoch_loss = global_epoch_loss /(len(val_loader) * params['batch_size']) # Mean loss
+    global_epoch_loss = global_epoch_loss /(len(val_loader) * batch_size) # Mean loss
     f1_score = multiclass_f1_score(input=all_preds_labels, target=all_targets, num_classes=NUMBER_OF_EMOT).item() # F1-Score
     cohen_kappa = cohen_kappa_score(all_targets, all_preds_labels) # Cohen Kappa coefficient
 
@@ -330,10 +244,23 @@ def model_training(params = None):
 
     # Load the data
     print('Loading data...')
-    dataloader_train, dataloader_val = data_loading(params)
+    daug_params = {k: v for k, v in params.items() if k.startswith('daug')} # Get the data augmentation parameters
+
+    dataloader_train = create_dataloader (datasplit = "train", batch_size = params['batch_size'], 
+                                            weighted_dataloader = params['weighted_train'], 
+                                            epoch_samples = params['epoch_samples'], daug_params = daug_params, 
+                                            image_norm = params['image_norm'])
+    dataloader_val = create_dataloader (datasplit = "val", batch_size = params['batch_size'],
+                                            weighted_dataloader = params['weighted_val'],
+                                            epoch_samples = params['epoch_samples'], daug_params = daug_params,
+                                            image_norm = params['image_norm'])
+
     # Create and prepare the model and the optimizer
     print('Creating model and setting optimizer and criterion...')
-    model, criterion, optimizer, device = model_creation(params)
+    seed_everything(params['random_seed'])
+    model, device = arch.model_creation(params['arch'], weights = None)
+
+    criterion, optimizer= define_criterion_optimizer(model, params)
 
 
     # Define the training parameters
@@ -345,7 +272,7 @@ def model_training(params = None):
 
     for epoch in range(params['epochs']):
         train(dataloader_train, model, criterion, optimizer, device, epoch, params, run)
-        metrics = validate(dataloader_val, model, criterion, device, epoch, params, run)
+        metrics = validate(dataloader_val, model, criterion, device, epoch, params['batch_size'], run)
 
         is_best = False # Flag to save the best model
         # Remember best f1-score and save checkpoint
@@ -405,7 +332,7 @@ def main(mode, sweep_id):
 
     elif mode == 'sweep':
         # Path of the parameters file
-        config_sweep_path = Path("config_resnet50.yaml")
+        config_sweep_path = Path("config_resnet50_pretrained_weighted_val.yaml")
         # Read data preparation parameters
         with open(config_sweep_path, "r", encoding='utf-8') as config_file:
             try:

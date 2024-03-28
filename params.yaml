@@ -6,19 +6,29 @@ preprocessing:
 
 training:
   random_seed: 33 #seed for reproducibility
-  daug_randomhorizontalflip: True
+  daug_p_value: 0.5
+  daug_horizontalflip: True
+  daug_shiftscalerotate: True
+  daug_coarsedropout: True
   daug_colorjitter: True
-  daug_randomaffine: True
-  daug_randomerasing: True
+  daug_gaussnoise: True
+  
   image_norm: "ImageNet"
   arch: "ResNet50" # architecture name 
   pretraining: "imagenet"
   batch_size: 256 # training and valid batch size
   epoch_samples: original # number of samples considered as one epoch, if None, the whole dataset length is considered
-  lr: '1e-8' # learning rate
+  weighted_train: True
+  weighted_val: True
+  lr: '1e-6' # learning rate
   momentum: 0.9 # SGD momentum, for SGD only
   optimizer: 'adam' # optimization method: sgd | adam
   epochs: 30  # maximum number of epochs to train
   patience: 5 # how many epochs of no loss improvement should we wait before stop training
-  
-  
+
+
+eval:
+  random_seed: 33
+  arch: "efficientnet_b2"
+  image_norm: "imagenet"
+  weights: "affectnet_cat_emot"

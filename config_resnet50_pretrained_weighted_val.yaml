@@ -1,0 +1,82 @@
+program: train_model.py
+name: ResNet50_pretrained_hyperparameter_tunning_weighted_val
+method: random
+metric:
+  goal: minimize
+  name: Val global mean loss per epoch
+parameters:
+  daug_horizontalflip:
+    values:
+      - True
+      - False
+    distribution: categorical
+  daug_shiftscalerotate:
+    values:
+      - True
+      - False
+    distribution: categorical
+  daug_coarsedropout:
+    values:
+      - True
+      - False
+    distribution: categorical
+  daug_colorjitter:
+    values:
+      - True
+      - False
+    distribution: categorical
+  daug_gaussnoise:
+    values:
+      - True
+      - False
+    distribution: categorical
+  daug_p_value:
+    max: 0.75
+    min: 0.25
+    distribution: uniform
+  image_norm:
+    values:
+      - "imagenet"
+      - "affectnet"
+    distribution: categorical
+  arch:
+    values:
+      - "resnet50"
+  lr:
+    values: [0.00001, 0.000005, 0.000001, 0.0000005, 0.0000001]
+    distribution: categorical
+  batch_size:
+    values: [32, 64, 96, 128, 192, 256]
+    distribution: categorical
+  optimizer:
+    values: 
+      - "adam"
+      - "rmsprop"
+      - "sgd"
+    distribution: categorical
+  momentum:
+    max: 0.99
+    min: 0.85
+    distribution: uniform
+  pretraining:
+    values:
+     - "imagenet"
+  epochs:
+    values: 
+      - 30
+  weighted_train: 
+    values:
+      - True
+  weighted_val: 
+    values:
+      - True
+  patience:
+    values: 
+      - 5
+  epoch_samples:
+    values: 
+      - "original"
+  random_seed:
+    values:
+      - 33
+    
