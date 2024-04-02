@@ -11,7 +11,7 @@ import numpy as np
 import cv2
 import torch
 
-from src import INTERIM_AFFECTNET_DIR, PROCESSED_AFFECTNET_DIR
+from src import NUMBER_OF_EMOT, INTERIM_AFFECTNET_DIR, PROCESSED_AFFECTNET_DIR
 from src.data.encoding import cart2polar_encoding
 import src.data.compute_AffectNet_norm_values as compute_normalization_values
 
@@ -73,8 +73,14 @@ def generate_weights(data_annot:dict, output_path:str, datasplit:str):
     annotation_weights['weight'] = 1 / annotation_weights['count']
     annotation_weights = annotation_weights.drop('count', axis=1).set_index('cat_emot')
 
-    data_weights = torch.empty(len(data_annot))
+    # Save the weights per label in a tensor
+    label_weights = torch.zeros(NUMBER_OF_EMOT, dtype=torch.float32)
+    for cat_emot in range(8):
+        label_weights[cat_emot] = annotation_weights.loc[cat_emot]['weight'] # Assign the weight of the current label to the tensor
+    torch.save(label_weights, os.path.join(output_path,'label_weights_' + datasplit + '.pt'))
 
+    # Save the weights per sample in a tensor
+    data_weights = torch.empty(len(data_annot))
     for idx in range(len(data_annot)):
         sample = data_annot.loc[idx]
         cat_emot = sample['cat_emot']

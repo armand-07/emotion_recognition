@@ -117,6 +117,7 @@ def data_transforms(only_normalize = False, daug_params = dict(), image_norm = "
 
 def create_dataloader(datasplit, batch_size, weighted_dataloader = False, epoch_samples = "original", 
                       daug_params = dict(), image_norm = "imagenet"):
+    # Only apply data augmentation on test and val if the weighted dataloader is used 
     if not weighted_dataloader and (datasplit == "test" or datasplit == "val"):
         transforms = data_transforms(only_normalize = True, daug_params = daug_params, image_norm = image_norm)
     else:

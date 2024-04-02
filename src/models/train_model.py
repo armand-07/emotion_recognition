@@ -22,7 +22,7 @@ from wandb.sdk import wandb_run
 import numpy as np
 import random
 
-from src import NUMBER_OF_EMOT, MODELS_DIR, AFFECTNET_CAT_EMOT
+from src import PROCESSED_AFFECTNET_DIR, NUMBER_OF_EMOT, MODELS_DIR, AFFECTNET_CAT_EMOT
 from src.data.dataset import create_dataloader
 from src.models import architectures as arch
 from src.models.metrics import compute_ROC_AUC_OVR
@@ -44,9 +44,21 @@ def seed_everything(seed):
 
 
 
-def define_criterion_optimizer(model, params):
+def define_criterion_optimizer(model, device, params):
     # Define criterion
-    criterion = nn.CrossEntropyLoss(reduction = 'mean') # Note that this case is equivalent to the combination of LogSoftmax and NLLLoss.
+    # Note that nn.CrossEntropyLoss is equivalent to the combination of LogSoftmax and NLLLoss.
+    if params['weighted_loss']:
+        label_weights_train = torch.load(os.path.join(PROCESSED_AFFECTNET_DIR, 
+                                                      'label_weights_train.pt')).float().to(device)
+        criterion_train = nn.CrossEntropyLoss(reduction = 'mean', weight=label_weights_train)
+        label_weights_val = torch.load(os.path.join(PROCESSED_AFFECTNET_DIR, 
+                                                    'label_weights_val.pt')).float().to(device)
+        criterion_val = nn.CrossEntropyLoss(reduction = 'mean', weight=label_weights_val) 
+    else:
+        criterion_train = nn.CrossEntropyLoss(reduction = 'mean', label_smoothing=0.0)
+        criterion_val = nn.CrossEntropyLoss(reduction = 'mean', label_smoothing=0.0)
+        
+        
     # Define optimizer
     if params["optimizer"].lower() == 'adam':
         optimizer = optim.Adam(model.parameters(), lr=float(params["lr"]))
@@ -61,7 +73,7 @@ def define_criterion_optimizer(model, params):
     else:
         raise ValueError(f"Invalid optimizer parameter: {params['optimizer']}")
     
-    return criterion, optimizer
+    return criterion_train, criterion_val, optimizer
 
 
 
@@ -114,7 +126,7 @@ def train(
     acc = acc.compute().item()
     global_epoch_loss = global_epoch_loss / (len(train_loader)) # all batches have same size
     run.log({"Train accuracy per epoch": acc}, step=epoch+1)
-    run.log({"Train loss mean per epoch": global_epoch_loss}, step=epoch+1)
+    run.log({"Train mean loss per epoch": global_epoch_loss}, step=epoch+1)
 
 
 
@@ -185,7 +197,7 @@ def validate(
     # Log the metrics
     run.log({"Val accuracy per epoch": acc1,
              "Val top-2 accuracy per epoch": acc2,
-             "Val global mean loss per epoch": global_epoch_loss,
+             "Val mean loss per epoch": global_epoch_loss,
              "Val F1-Score per epoch": f1_score,
              "Val Cohen Kappa coefficient per epoch": cohen_kappa,
              "Plot ROC AUC score with OvR strategy":  wandb.Image(chart_ROC_AUC),
@@ -247,11 +259,11 @@ def model_training(params = None):
     daug_params = {k: v for k, v in params.items() if k.startswith('daug')} # Get the data augmentation parameters
 
     dataloader_train = create_dataloader (datasplit = "train", batch_size = params['batch_size'], 
-                                            weighted_dataloader = params['weighted_train'], 
+                                            weighted_dataloader = params['weighted_sampler_train'], 
                                             epoch_samples = params['epoch_samples'], daug_params = daug_params, 
                                             image_norm = params['image_norm'])
     dataloader_val = create_dataloader (datasplit = "val", batch_size = params['batch_size'],
-                                            weighted_dataloader = params['weighted_val'],
+                                            weighted_dataloader = params['weighted_sampler_val'],
                                             epoch_samples = params['epoch_samples'], daug_params = daug_params,
                                             image_norm = params['image_norm'])
 
@@ -260,7 +272,7 @@ def model_training(params = None):
     seed_everything(params['random_seed'])
     model, device = arch.model_creation(params['arch'], weights = None)
 
-    criterion, optimizer= define_criterion_optimizer(model, params)
+    criterion_train, criterion_val, optimizer= define_criterion_optimizer(model, device, params)
 
 
     # Define the training parameters
@@ -271,8 +283,8 @@ def model_training(params = None):
     t0 = time.time()
 
     for epoch in range(params['epochs']):
-        train(dataloader_train, model, criterion, optimizer, device, epoch, params, run)
-        metrics = validate(dataloader_val, model, criterion, device, epoch, params['batch_size'], run)
+        train(dataloader_train, model, criterion_train, optimizer, device, epoch, params, run)
+        metrics = validate(dataloader_val, model, criterion_val, device, epoch, params['batch_size'], run)
 
         is_best = False # Flag to save the best model
         # Remember best f1-score and save checkpoint
@@ -332,7 +344,7 @@ def main(mode, sweep_id):
 
     elif mode == 'sweep':
         # Path of the parameters file
-        config_sweep_path = Path("config_resnet50_pretrained_weighted_val.yaml")
+        config_sweep_path = Path("config_resnet50_pretrained_weighted_loss.yaml")
         # Read data preparation parameters
         with open(config_sweep_path, "r", encoding='utf-8') as config_file:
             try:
