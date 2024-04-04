@@ -21,6 +21,7 @@ from wandb.sdk import wandb_run
 
 import numpy as np
 import random
+import math
 
 from src import PROCESSED_AFFECTNET_DIR, NUMBER_OF_EMOT, MODELS_DIR, AFFECTNET_CAT_EMOT
 from src.data.dataset import create_dataloader
@@ -130,6 +131,75 @@ def train(
 
 
 
+def train_distillation(
+        train_loader: DataLoader, 
+        model_student: torch.nn.Module,
+        model_teacher: torch.nn.Module, 
+        label_criterion: torch.nn,
+        distill_criterion: torch.nn, 
+        alpha: float,
+        optimizer: torch.optim, 
+        device: torch.device,
+        epoch: int,
+        params: dict,
+        run: wandb_run.Run
+        ) -> None:
+
+    # Switch to train mode
+    model_student.train()
+    model_teacher.eval()
+    # I will save the values of the accuracies in this list to return the mean of the whole dataset at the end
+    global_epoch_loss = torch.zeros(1, dtype=torch.float, device = device)
+    acc = MulticlassAccuracy(device=device)
+    cos_sim = nn.CosineSimilarity(dim=1, eps=1e-6)
+    global_cosine_sim = torch.zeros(1, dtype=torch.float, device = device)
+    
+    for i, (imgs, cat_target, cont_target) in tqdm(enumerate(train_loader), 
+                                                   total=len(train_loader), desc = f'(TRAIN)Epoch {epoch+1}', 
+                                                   miniters=int(len(train_loader)/100)):
+        # Reset gradients
+        optimizer.zero_grad()
+        # Move images and target to gpu
+        imgs = imgs.to(device)
+        cat_target = cat_target.to(device)
+
+        # Forward batch of images through the network
+        pred_student, pred_dist_student = model_student(imgs)
+         
+        with torch.no_grad():
+            pred_teacher = model_teacher(imgs)
+            
+        # Compute the loss
+        loss_label = label_criterion(pred_student, cat_target)
+        loss_distill = distill_criterion(pred_dist_student, pred_teacher)
+        loss = alpha * loss_label + (1-alpha) * loss_distill
+
+        # Compute gradient and optimize weights
+        loss.backward()
+        optimizer.step()
+        # Measure accuracy and loss
+        acc.update(pred_student, cat_target)
+        global_epoch_loss += loss
+        global_cosine_sim += cos_sim (pred_student, pred_dist_student)
+        if i % 100 == 0:
+            predicted_label = torch.argmax(pred_student, dim=1)
+            acc_batch = torch.sum(predicted_label == cat_target).item()/params['batch_size']*100
+            tqdm.write(f"TRAIN [{i+1}/{len(train_loader)}], Batch accuracy: {acc_batch:.3f}%; Batch Loss: {loss.item():.3f}")
+            if torch.isnan(loss):
+                raise ValueError(f"Loss is NaN at epoch {epoch+1} and step {i+1}, caused by gradient clipping or small learning rate")
+    # Reset gradients
+    optimizer.zero_grad()
+
+    # Compute the metrics
+    acc = acc.compute().item()
+    global_epoch_loss = global_epoch_loss / (len(train_loader)) # all batches have same size
+    global_cosine_sim = global_cosine_sim / (len(train_loader)) # all batches have same size
+    run.log({"Train accuracy per epoch": acc}, step=epoch+1)
+    run.log({"Train mean loss per epoch": global_epoch_loss}, step=epoch+1)
+    run.log({"Train output embedding label/distill cosine similarity per epoch": global_cosine_sim}, step=epoch+1)
+
+
+
 def validate(
         val_loader: DataLoader, 
         model: torch.nn.Module, 
@@ -217,6 +287,107 @@ def validate(
 
 
 
+def validate_distillation(
+        val_loader: DataLoader, 
+        model: torch.nn.Module, 
+        criterion: torch.nn, 
+        embedding_method: str,
+        device: torch.device,
+        epoch: int,
+        batch_size: int,
+        run: wandb_run.Run
+        ) -> dict:
+
+    # Switch model to evaluate mode
+    model.eval()
+
+    # I will save the values of the accuracies in this list to return the mean of the whole dataset at the end
+    acc1 = torch.zeros(1, dtype=torch.int, device = device)
+    all_preds_labels = torch.empty(0, device = 'cpu')
+    all_preds_dist = torch.empty(0, device = 'cpu')
+    softmax = nn.Softmax(dim=1)
+    all_targets = torch.empty(0, device = 'cpu')
+    global_epoch_loss = 0.0
+    cos_sim = nn.CosineSimilarity(dim=1, eps=1e-6)
+    global_cosine_sim = torch.zeros(1, dtype=torch.float, device = device)
+    
+    with torch.no_grad():  #There is no need to compute gradients
+        for i, (imgs, cat_target, _) in tqdm(enumerate(val_loader), 
+                                                       total=len(val_loader), desc = f'(VAL)Epoch {epoch+1}', 
+                                                        miniters=int(len(val_loader)/100)):
+            # Move images to gpu
+            imgs = imgs.to(device)
+            cat_target = cat_target.to(device)
+
+            # Forward batch of images through the network
+            pred, pred_dist = model(imgs)
+            if embedding_method == "class":
+                prediction = pred
+            elif embedding_method == "distill":
+                prediction = pred_dist
+            elif embedding_method == "both":
+                prediction = pred + pred_dist
+
+            predicted_label = torch.argmax(prediction, dim=1) # Get the predicted labels using argmax
+            
+            # Compute the loss
+            loss = criterion(prediction, cat_target)
+            # Measure metrics
+            acc1 += torch.sum(predicted_label == cat_target)
+            global_epoch_loss += loss.data.item()*imgs.shape[0] # Accumulate the loss
+
+            # 
+            global_cosine_sim += cos_sim (pred, pred_dist)
+
+            # PREDS ARE IN LOGITS NO IN PROBABILITY
+            all_preds_labels = torch.cat((all_preds_labels, predicted_label.cpu())) 
+            all_preds_dist = torch.cat((all_preds_dist, softmax(prediction).cpu())) # Apply softmax to the predictions
+            all_targets = torch.cat((all_targets, cat_target.cpu()))
+            
+            if i % 100 == 0:
+                acc_batch = torch.sum(predicted_label == cat_target).item()/batch_size*100
+                tqdm.write(f'VAL [{i+1}/{len(val_loader)}], Batch accuracy: {acc_batch:.2f}%; Batch Loss: {loss.item():.3f}')
+
+    # Compute the metrics
+    acc1 = acc1.item()/(len(val_loader) * batch_size) # Log the accuracy
+    acc2 = top_k_accuracy_score(all_targets.numpy(), all_preds_dist.numpy(), k=2, normalize=True) # Log the top-2 accuracy
+    global_epoch_loss = global_epoch_loss /(len(val_loader) * batch_size) # Mean loss
+    f1_score = multiclass_f1_score(input=all_preds_labels, target=all_targets, num_classes=NUMBER_OF_EMOT).item() # F1-Score
+    cohen_kappa = cohen_kappa_score(all_targets, all_preds_labels) # Cohen Kappa coefficient
+    global_cosine_sim = global_cosine_sim / (len(val_loader)) # all batches have same size
+
+
+    # ROC AUC score with OvR strategy
+    chart_ROC_AUC, roc_auc_per_label, roc_auc_ovr = compute_ROC_AUC_OVR(all_targets, all_preds_dist, AFFECTNET_CAT_EMOT)
+
+    # Log the confusion matrix
+    conf_matrix = confusion_matrix(all_targets.numpy(), all_preds_labels.numpy(), normalize = 'true')
+    chart_conf_matrix = vis.create_conf_matrix(conf_matrix)
+
+    # Log the metrics
+    run.log({"Val accuracy per epoch": acc1,
+             "Val top-2 accuracy per epoch": acc2,
+             "Val mean loss per epoch": global_epoch_loss,
+             "Val F1-Score per epoch": f1_score,
+             "Val Cohen Kappa coefficient per epoch": cohen_kappa,
+             "Plot ROC AUC score with OvR strategy":  wandb.Image(chart_ROC_AUC),
+             "Area Under the (ROC AUC) Curve per label": roc_auc_per_label,
+             "Area Under the (ROC AUC) Curve OvR": roc_auc_ovr,
+             "Confusion Matrix": chart_conf_matrix
+             }, step=epoch+1, commit=True)
+
+    metrics ={
+        "Accuracy": acc1,
+        "Top-2 Accuracy": acc2,
+        "Global Val Mean Loss": global_epoch_loss,
+        "F1-Score": f1_score,
+        "Cohen Kappa coefficient": cohen_kappa,
+        "Area Under the (ROC AUC) Curve OvR": roc_auc_ovr}
+    
+    return metrics
+
+
+
 def save_checkpoint(
         state: 'dict', 
         is_best: bool,
@@ -282,9 +453,24 @@ def model_training(params = None):
     best_metrics = {}
     t0 = time.time()
 
+    distillation = False
+
     for epoch in range(params['epochs']):
-        train(dataloader_train, model, criterion_train, optimizer, device, epoch, params, run)
-        metrics = validate(dataloader_val, model, criterion_val, device, epoch, params['batch_size'], run)
+        if distillation:
+            decaying_strategy = 1
+            if decaying_strategy == 1:
+                alpha = 1 - (epoch/params['epochs'])
+            elif decaying_strategy == 2:
+                alpha = math.cos(epoch/params['epochs'])
+            elif decaying_strategy == 2:
+                alpha = (1 - epoch/params['epochs'])**2
+            criterion_distill = nn.KLDivLoss(reduction="batchmean")
+            criterion_distill = nn.CrossEntropyLoss(reduction = 'mean')
+            train_distillation(dataloader_train, model, criterion_train, criterion_distill, alpha, optimizer, device, epoch, params, run)
+            metrics = validate_distillation(dataloader_val, model, criterion_val, "class", device, epoch, params['batch_size'], run)
+        else:
+            train(dataloader_train, model, criterion_train, optimizer, device, epoch, params, run)
+            metrics = validate(dataloader_val, model, criterion_val, device, epoch, params['batch_size'], run)
 
         is_best = False # Flag to save the best model
         # Remember best f1-score and save checkpoint
