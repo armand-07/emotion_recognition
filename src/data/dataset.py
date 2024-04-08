@@ -116,7 +116,7 @@ def data_transforms(only_normalize = False, daug_params = dict(), image_norm = "
 
 
 def create_dataloader(datasplit, batch_size, weighted_dataloader = False, epoch_samples = "original", 
-                      daug_params = dict(), image_norm = "imagenet"):
+                      daug_params = dict(), image_norm = "imagenet", num_workers = 4):
     # Only apply data augmentation on test and val if the weighted dataloader is used 
     if not weighted_dataloader and (datasplit == "test" or datasplit == "val"):
         transforms = data_transforms(only_normalize = True, daug_params = daug_params, image_norm = image_norm)
@@ -136,8 +136,12 @@ def create_dataloader(datasplit, batch_size, weighted_dataloader = False, epoch_
         sampler = WeightedRandomSampler(weights, epoch_size, replacement=True)
         # Create dataloaders
         dataloader = DataLoader(dataset, batch_size = batch_size, pin_memory = True,
-                                sampler=sampler, drop_last=True, num_workers=4)
+                                sampler = sampler, drop_last = True, num_workers = num_workers)
+        print(f"Weighted dataloader created for {datasplit} datasplit")
+        print(f"Transforms: {transforms}")
     else:
         dataloader = DataLoader(dataset, batch_size = batch_size, pin_memory = True,
-                                shuffle=True, drop_last=True, num_workers=4)
+                                shuffle = True, drop_last = True, num_workers = num_workers)
+        print(f"Normal dataloader created for {datasplit} datasplit")
+        print(f"Transforms: {transforms}")
     return dataloader

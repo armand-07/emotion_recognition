@@ -18,20 +18,19 @@ import src.data.compute_AffectNet_norm_values as compute_normalization_values
 
 def generate_data(data_annot:pd.DataFrame, store_imgs:np.memmap, store_cat_emot:np.memmap, 
                   store_cont_emot:np.memmap, params:dict):
-    """ Generates the processed data and stores it in the memmap files. The ids are implicit in the order of the numpy array, 
+    """Generates the processed data and stores it in the memmap files. The ids are implicit in the order of the numpy array, 
     and this id is not equal to the original id. All the images are read and stored as a numpy array in the format [0-255]. 
     The categorical emotions are stored as a numpy array of int64. The continuous emotions are stored as a numpy array
     of float32. 
 
     Params:
-    data_annot (pd.DataFrame): The interim datasplit annotations ordered increasingly based on the path id of images. 
-    store_imgs (np.memmap): The memmap file to store the images
-    store_cat_emot (np.memmap): The memmap file to store the categorical emotions
-    store_cont_emot (np.memmap): The memmap file to store the continuous emotions
-    params (dict): The parameters to be used for the data processing
-
+        - data_annot (pd.DataFrame): The interim datasplit annotations ordered increasingly based on the path id of images. 
+        - store_imgs (np.memmap): The memmap file to store the images
+        - store_cat_emot (np.memmap): The memmap file to store the categorical emotions
+        - store_cont_emot (np.memmap): The memmap file to store the continuous emotions
+        - params (dict): The parameters to be used for the data processing
     Returns:
-    None
+        - None
     """
     for id in tqdm(range(len(data_annot))):
         sample = data_annot.loc[id]                  # The id of the image is implicit
@@ -58,16 +57,16 @@ def generate_data(data_annot:pd.DataFrame, store_imgs:np.memmap, store_cat_emot:
 
 
 def generate_weights(data_annot:dict, output_path:str, datasplit:str):
-    """ Generates the weights of the categorical emotions and stores them in a tensor. It contains the 
+    """Generates the weights of the categorical emotions and stores them in a tensor. It contains the 
     weights for each id in the datasplit based on the categorical emotions appearance in datasplit. 
     The weight is 1/count(cat_emot). 
 
     Params:
-    data_annot (pd.DataFrame): The interim datasplit annotations
-    output_path (str): The path where the processed datasplit will be stored
-    datasplit (str): The name of the datasplit
+        - data_annot (pd.DataFrame): The interim datasplit annotations
+        - output_path (str): The path where the processed datasplit will be stored
+        - datasplit (str): The name of the datasplit
     Returns:
-    None
+        - None
     """
     annotation_weights = data_annot['cat_emot'].value_counts().reset_index(name='count')
     annotation_weights['weight'] = 1 / annotation_weights['count']
@@ -91,8 +90,7 @@ def generate_weights(data_annot:dict, output_path:str, datasplit:str):
 
 
 def process_datasplit(data_annot: pd.DataFrame, output_path:str, datasplit:str, params:dict):
-    """
-    From the interim datasplit annotations and the raw images, it generates the processed datasplit following 
+    """From the interim datasplit annotations and the raw images, it generates the processed datasplit following 
     the 'params' specifications and stores it in a numpy memmap file. Concretly generates the following files:
     - datasplit_ids.dat: The ids of the images with the shape (N) and dtype int64
     - datasplit_imgs.dat: The images as numpy arrays in the shape (N, 224, 224, 3) and dtype uint8
@@ -102,12 +100,12 @@ def process_datasplit(data_annot: pd.DataFrame, output_path:str, datasplit:str, 
     that contains the weights for each id in the datasplit.
 
     Parameters:
-    data_annot (pd.DataFrame): The interim datasplit annotations
-    output_path (str): The path where the processed datasplit will be stored
-    datasplit (str): The name of the datasplit
-    params (dict): The parameters to be used for the data processing
+        - data_annot (pd.DataFrame): The interim datasplit annotations
+        - output_path (str): The path where the processed datasplit will be stored
+        - datasplit (str): The name of the datasplit
+        - params (dict): The parameters to be used for the data processing
     Returns:
-    None
+        - None
     """
     # Create the memmap files
     store_imgs = np.memmap(os.path.join(output_path, datasplit+"_imgs.dat"), dtype=np.uint8, 
@@ -136,10 +134,10 @@ def preprocess_affectnet(output_path:str, params:dict):
     them in .pt files. Morover, it stores the datasplit sizes in a CSV file.
     
     Params:
-    output_path (str): The path where the processed datasplit will be stored
-    params (dict): The parameters to be used for the data processing
+        - output_path (str): The path where the processed datasplit will be stored
+        - params (dict): The parameters to be used for the data processing
     Returns:
-    None
+        - None
     """
     # First load the interim annotations
     annotations_path = Path(os.path.join(INTERIM_AFFECTNET_DIR, 'annotations'))
@@ -169,15 +167,15 @@ def preprocess_affectnet(output_path:str, params:dict):
 
 
 def main(params:dict):
-    """ Runs data preprocessing script to turn interim data and raw images into
-        cleaned data ready to be forwarded to model with a memory efficient data 
-        structure. The output directory is cleaned before the new data processed 
-        data is generated.
+    """Runs data preprocessing script to turn interim data and raw images into
+    cleaned data ready to be forwarded to model with a memory efficient data 
+    structure. The output directory is cleaned before the new data processed 
+    data is generated.
         
-        Params:
-        params (dict): The parameters to be used for the data processing
-        Returns:
-        None
+    Params:
+        - params (dict): The parameters to be used for the data processing
+    Returns:
+        - None
     """
     output_path = PROCESSED_AFFECTNET_DIR
     # Delete the processed folder if it exists to clean creation of new data

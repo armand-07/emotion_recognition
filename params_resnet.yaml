@@ -12,25 +12,17 @@ training:
   daug_coarsedropout: True
   daug_colorjitter: True
   daug_gaussnoise: True
+  
   image_norm: "ImageNet"
-
-  distillation : True 
-  alpha: 0.5
-  decaying_strategy: 0
-  embedding_method: "both"
-  arch: "deit_tiny" # architecture name
-  teacher_arch: "efficientnet"
+  arch: "ResNet50" # architecture name 
   pretraining: "imagenet"
-  batch_size: 32 # training and valid batch size
+  batch_size: 256 # training and valid batch size
   epoch_samples: original # number of samples considered as one epoch, if None, the whole dataset length is considered
-  weighted_sampler_train: False
-  weighted_sampler_val: False
-  weighted_loss: True
-  label_smoothing_dist: 0.1
-
-  lr: '1e-7' # learning rate
+  weighted_sampler_train: True
+  weighted_sampler_val: True
+  lr: '1e-6' # learning rate
   momentum: 0.9 # SGD momentum, for SGD only
-  optimizer: 'adamw' # optimization method: sgd | adam
+  optimizer: 'adam' # optimization method: sgd | adam
   epochs: 30  # maximum number of epochs to train
   patience: 5 # how many epochs of no loss improvement should we wait before stop training
 
