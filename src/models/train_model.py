@@ -173,7 +173,8 @@ def validate(val_loader: DataLoader, model: torch.nn.Module, criterion: torch.nn
     """
     model.eval() # switch model to evaluate mode
     # Stablish some metrics to be saved during validation
-    acc1 = torch.zeros(1, dtype=torch.int, device = device)
+    acc1 = MulticlassAccuracy(device=device)
+    acc2 = MulticlassAccuracy(device=device, k = 2)
     all_preds_labels = torch.empty(0, device = 'cpu')
     all_preds_distrib = torch.empty(0, device = 'cpu')
     softmax = nn.Softmax(dim=1)
@@ -195,7 +196,8 @@ def validate(val_loader: DataLoader, model: torch.nn.Module, criterion: torch.nn
             # Compute the loss
             loss = criterion(prediction, cat_target)
             # Measure metrics
-            acc1 += torch.sum(predicted_label == cat_target)
+            acc1.update(prediction, cat_target)
+            acc2.update(prediction, cat_target)
             global_epoch_loss += loss.data.item()*imgs.shape[0] # Accumulate the loss
 
             # Store the predictions and targets to compute metrics
@@ -207,7 +209,7 @@ def validate(val_loader: DataLoader, model: torch.nn.Module, criterion: torch.nn
                 acc_batch = torch.sum(predicted_label == cat_target).item()/batch_size*100
                 tqdm.write(f'VAL [{i+1}/{len(val_loader)}], Batch accuracy: {acc_batch:.2f}%; Batch Loss: {loss.item():.3f}')
         # Compute metrics
-        metrics = save_val_wandb_metrics(acc1, val_loader, batch_size, all_targets, all_preds_distrib,
+        metrics = save_val_wandb_metrics(acc1, acc2, val_loader, batch_size, all_targets, all_preds_distrib,
                                  all_preds_labels, global_epoch_loss, epoch, run)
     return metrics
 
@@ -232,7 +234,8 @@ def validate_distillation(val_loader: DataLoader, model: torch.nn.Module, criter
     """
     model.eval() # switch model to evaluate mode
     # Stablish some metrics to be saved during validation
-    acc1 = torch.zeros(1, dtype=torch.int, device = device)
+    acc1 = MulticlassAccuracy(device=device)
+    acc2 = MulticlassAccuracy(device=device, k = 2)
     all_preds_labels = torch.empty(0, device = 'cpu')
     all_preds_dist = torch.empty(0, device = 'cpu')
     softmax = nn.Softmax(dim=1)
@@ -263,7 +266,8 @@ def validate_distillation(val_loader: DataLoader, model: torch.nn.Module, criter
             # Compute the loss
             loss = criterion(prediction, cat_target)
             # Measure metrics
-            acc1 += torch.sum(predicted_label == cat_target)
+            acc1.update(prediction, cat_target)
+            acc2.update(prediction, cat_target)
             global_epoch_loss += loss.data.item()*imgs.shape[0] # Accumulate the loss
             global_cosine_sim += torch.sum(cos_sim (pred, pred_dist))
 
@@ -358,7 +362,8 @@ def model_training(params = None):
         weighted_data_val = params['weighted_val']
     else:
         weighted_data_val = False
-
+    
+    arch.seed_everything(params['random_seed'])
 
     dataloader_train = create_dataloader (datasplit = "train", batch_size = params['batch_size'], 
                                             weighted_dataloader = weighted_data_train, 
@@ -371,7 +376,7 @@ def model_training(params = None):
 
     # Create and prepare the model and the optimizer
     print('Creating model and setting optimizer...')
-    arch.seed_everything(params['random_seed'])
+    
     model, device = arch.model_creation(params['arch'], weights = params['pretraining'])
     optimizer = arch.define_optimizer(model, params['optimizer'], params['lr'], params['momentum'])
 
@@ -490,7 +495,7 @@ def main(mode, wandb_id):
         
     elif mode == 'sweep':
         # Path of the parameters file
-        config_sweep_path = Path("config_resnet50_pretrained_weighted_loss.yaml")
+        config_sweep_path = Path("config_resnet50_pretrained.yaml")
         # Read data preparation parameters
         with open(config_sweep_path, "r", encoding='utf-8') as config_file:
             try:

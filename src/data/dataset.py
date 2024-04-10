@@ -75,7 +75,7 @@ class AffectNetDatasetValidation(Dataset):
     
 
 
-def data_transforms(only_normalize = False, daug_params = dict(), image_norm = "imagenet"):
+def data_transforms(only_normalize = False, daug_params = dict(), image_norm = "imagenet", resize = False):
     transforms = []
     if not only_normalize:
         p_value = daug_params["daug_p_value"]
@@ -95,6 +95,8 @@ def data_transforms(only_normalize = False, daug_params = dict(), image_norm = "
                 p = p_value))
         if daug_params["daug_gaussnoise"]:
             transforms.append(A.GaussNoise(var_limit = (10.0, 75.0), p = p_value))
+    if resize:
+        transforms.append(A.Resize(224, 224))
 
     # Normalize the image
     if image_norm.lower() == "imagenet":      # Normalize the image with the mean and std of the ImageNet dataset

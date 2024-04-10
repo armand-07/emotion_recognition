@@ -1,9 +1,9 @@
+import requests
 import os
 import cv2
 from ultralytics import YOLO
 
 from src import MODELS_DIR  
-from src.models.download_pretrained_models import download_YOLO_model_face_recognition
 
 
 def load_HAAR_cascade_face_detection():
@@ -16,6 +16,7 @@ def load_HAAR_cascade_face_detection():
     return detector_HAAR_cascade
 
 
+
 def load_HOG_SVM_cascade_face_detection():
     # Load HOG + SVM method
     try:
@@ -25,6 +26,29 @@ def load_HOG_SVM_cascade_face_detection():
         print("There was a problem with HOG + SVM method using the OpenCV library:", str(e))
 
     return detector_HOG_SVM
+
+
+
+def download_YOLO_model_face_recognition(size="medium", directory=MODELS_DIR):
+    """ Downloads the pretrained model for the YOLO depending on specified size.
+    """
+    # URL of the file to be downloaded
+    # Replace with the URL of the YOLOv8 model
+    if size == "nano":
+        url = "https://github.com/akanametov/yolov8-face/releases/download/v0.0.0/yolov8n-face.pt"
+    elif size == "medium":
+        url = "https://github.com/akanametov/yolov8-face/releases/download/v0.0.0/yolov8m-face.pt"
+    elif size == "large":
+        url = "https://github.com/akanametov/yolov8-face/releases/download/v0.0.0/yolov8l-face.pt"
+    
+    # Send a HTTP request to the URL of the file
+    filename = url.split("/")[-1]
+    response = requests.get(url)
+
+    model_path = os.path.join(directory, filename)
+    with open(model_path, mode="wb") as file:
+        file.write(response.content)
+
 
 
 def load_YOLO_model_face_recognition(device, size = "medium",  directory=MODELS_DIR):
@@ -52,4 +76,3 @@ def load_YOLO_model_face_recognition(device, size = "medium",  directory=MODELS_
     model = YOLO(model_path)
     
     return model
-        

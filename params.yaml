@@ -18,8 +18,8 @@ training:
   alpha: 0.5
   decaying_strategy: 0
   embedding_method: "both"
-  arch: "deit_tiny" # architecture name
-  teacher_arch: "efficientnet"
+  arch: "deit_base" # architecture name
+  teacher_arch: "efficientnet_b2"
   pretraining: "imagenet"
   batch_size: 32 # training and valid batch size
   epoch_samples: original # number of samples considered as one epoch, if None, the whole dataset length is considered
@@ -37,6 +37,6 @@ training:
 
 eval:
   random_seed: 33
-  arch: "efficientnet_b2"
+  arch: "poster"
   image_norm: "imagenet"
   weights: "affectnet_cat_emot"

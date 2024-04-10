@@ -7,6 +7,7 @@ ROOT_DIR = Path(Path(__file__).resolve().parent.parent)
 MODELS_DIR = os.path.join(ROOT_DIR, "models")
 RAW_DATA_DIR = os.path.join(ROOT_DIR, "data", "raw")
 INTERIM_DATA_DIR = os.path.join(ROOT_DIR, "data", "interim")
+INFERENCE_DIR = os.path.join(ROOT_DIR, "inference")
 
 AFFECTNET_DIR = os.path.normpath("/mnt/gpid08/datasets/affectnet/") # substitute with the actual data path
 RAW_AFFECTNET_DIR =  os.path.join(AFFECTNET_DIR, "raw") 
