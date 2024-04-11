@@ -1,5 +1,5 @@
 program: train_model.py
-name: ResNet50_pretrained_hyperparameter_tunning_weighted_loss
+name: ViT_pretrained_hyperparameter_tunning_weighted_loss
 method: random
 metric:
   goal: minimize
@@ -46,7 +46,7 @@ parameters:
     values: [0.00001, 0.000005, 0.000001, 0.0000005, 0.0000001]
     distribution: categorical
   batch_size:
-    values: [32, 64, 96, 128, 192, 256]
+    values: [32, 64, 96, 128, 160, 192]
     distribution: categorical
   optimizer:
     values: 
@@ -60,6 +60,10 @@ parameters:
   pretraining:
     values:
      - "imagenet"
+  label_smoothing:
+    max: 0.1
+    min: 0
+    distribution: uniform
   epochs:
     values: 
       - 30

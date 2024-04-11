@@ -21,12 +21,12 @@ training:
   arch: "vit" # architecture name
   teacher_arch: "efficientnet_b2"
   pretraining: "imagenet"
-  batch_size: 256 # training and valid batch size
+  batch_size: 224 # training and valid batch size
   epoch_samples: original # number of samples considered as one epoch, if None, the whole dataset length is considered
   weighted_sampler_train: False
   weighted_sampler_val: False
   weighted_loss: True
-  label_smoothing_dist: 0.1
+  label_smoothing: 0.0
 
   lr: '1e-7' # learning rate
   momentum: 0.9 # SGD momentum, for SGD only

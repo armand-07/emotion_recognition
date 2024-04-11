@@ -495,7 +495,7 @@ def main(mode, wandb_id):
         
     elif mode == 'sweep':
         # Path of the parameters file
-        config_sweep_path = Path("config_resnet50_pretrained.yaml")
+        config_sweep_path = Path("config_vit_pretrained_weighted_batch.yaml")
         # Read data preparation parameters
         with open(config_sweep_path, "r", encoding='utf-8') as config_file:
             try:

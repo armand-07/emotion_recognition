@@ -26,16 +26,25 @@ def create_faces_batch(img, face_transforms, face_bboxes, device):
         torch.Tensor: A batch of face images.
     """
     total_faces = len(face_bboxes)
+    face_bboxes = face_bboxes.astype(int)
+    img_height, img_width, _ = img.shape
+
+
     face_batch = torch.zeros((total_faces, 3, 224, 224)).to(device)
     for i in range(total_faces):
-        x, y, w, h = face_bboxes[i].astype(int)
+        # Limit to contours of image
+        x = max(0, face_bboxes[i][0])
+        y = max(0, face_bboxes[i][1])
+        w = min(face_bboxes[i][2], img_width - x)
+        h = min(face_bboxes[i][3], img_height - y)
+        # Take face from image
         face_img = img[y:y+h, x:x+w]
         face_batch[i] = face_transforms(image = face_img)['image']  # Apply transformations
     return face_batch
 
 
 
-def infer_image(img, face_detector, emotion_model, device, face_transforms, face_threshold = 0.5):
+def infer_image_debug(img, face_model, emotion_model, device, face_transforms, face_threshold = 0.5):
     """Function to infer an image using the specified model and detector.
     Args:
         image (np.array): The image to be inferred.
@@ -44,7 +53,7 @@ def infer_image(img, face_detector, emotion_model, device, face_transforms, face
         np.array: The image with the annotations.
     """
     start = time.time()
-    [faces_bbox_YOLO, confidence_YOLO] = detect_faces_YOLO(img, face_detector, format = 'xywh-center')
+    [faces_bbox_YOLO, confidence_YOLO] = detect_faces_YOLO(img, face_model, format = 'xywh-center')
     end_detect_faces = time.time()
     print(f"Time to detect faces: {end_detect_faces - start}")
     
@@ -73,29 +82,50 @@ def infer_image(img, face_detector, emotion_model, device, face_transforms, face
     return img
 
 
+def infer_image(img, face_model, emotion_model, device, face_transforms, face_threshold = 0.5):
+    """Function to infer an image using the specified model and detector.
+    Args:
+        image (np.array): The image to be inferred.
+        model (YOLO): The model to be used.
+    Returns:
+        np.array: The image with the annotations.
+    """
+    [faces_bbox_YOLO, confidence_YOLO] = detect_faces_YOLO(img, face_model, format = 'xywh-center')
+    
+    filtered_faces = faces_bbox_YOLO[confidence_YOLO > face_threshold]
+    filtered_faces = transform_bbox_to_square(filtered_faces)
+    if len(filtered_faces) != 0:
+        face_batch = create_faces_batch(img, face_transforms, filtered_faces, device)
+        
+        with torch.no_grad():
+            face_batch.to(device)
+            output = emotion_model(face_batch)
+            labels = arch.get_predictions(output)
+        img = plot_bbox_annotations(img, filtered_faces, format = 'xywh', other_annot = labels, display = False)
+    else:
+        print("No faces to be analyzed")
+        
+    return img
 
-def infer_video(cap, face_detector, emotion_model, device, face_threshold = 0.5):
+
+
+def infer_video_save(cap, output_cap, face_model, emotion_model, device, face_transforms, face_threshold = 0.5):
     # Read until video is completed
     while(cap.isOpened()):
         # Capture frame-by-frame
         ret, frame = cap.read() # ret is a boolean that returns True if the frame is available. frame is the image array.
         if ret == True:
-            start = time.time()
-            end = time.time()
-            print(end - start)
-            faces_bbox_YOLO = dict(enumerate(faces_bbox_YOLO))
-            # Display the resulting frame
-            cv2.imshow('Frame',frame)
-            
-            if cv2.waitKey(25) & 0xFF == ord('q'): # Press Q on keyboard to  exit
-                break
+            frame = infer_image(frame, face_model, emotion_model, device, face_transforms, face_threshold)
+            # Write the frame into the file 'output.mp4'
+            output_cap.write(frame)
+            #if cv2.waitKey(25) & 0xFF == ord('q'): # Press Q on keyboard to  exit
+            #    break
         else: # Break the loop
             break
     # When everything done, release the video capture object
     cap.release()
- 
-    # Closes all the frames
-    cv2.destroyAllWindows()
+    output_cap.release()
+
 
 
 def load_models(wandb_id, face_detector_size = "medium"):
@@ -133,6 +163,24 @@ def main(mode: str, file: str, wandb_id: str, face_detector_size:str)-> None:
         if not os.path.exists(path):
             raise FileNotFoundError(f"File {path} not found")
         cap = cv2.VideoCapture(path)
+        # Get the width, height and fps of the video
+        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        filename = os.path.join(INFERENCE_DIR, file.split('.')[0]+"inference.mp4")
+        fps = int(cap.get(cv2.CAP_PROP_FPS))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        # Define the codec and create VideoWriter object
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        output_cap = cv2.VideoWriter(filename, fourcc, fps, (frame_width, frame_height))
+        start = time.time()
+        infer_video_save(cap, output_cap, face_model, emotion_model, device, face_transforms)
+        end = time.time()
+        print(f"The time needed to process the video: {end - start:.2f}s")
+        print(f"The average time per frame: {(end - start)/total_frames:.5f}s")
+        print(f"It is {((end - start)/total_frames)/(1/fps):.2f} times slower than real time inference with the video's {fps} fps")
+        print("The video has been saved in:", path)
+
     elif mode == 'img':
         path = os.path.join(INFERENCE_DIR, file)
         if not os.path.exists(path):
