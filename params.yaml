@@ -14,14 +14,14 @@ training:
   daug_gaussnoise: True
   image_norm: "ImageNet"
 
-  distillation : True 
+  distillation : False 
   alpha: 0.5
   decaying_strategy: 0
   embedding_method: "both"
-  arch: "deit_base" # architecture name
+  arch: "vit" # architecture name
   teacher_arch: "efficientnet_b2"
   pretraining: "imagenet"
-  batch_size: 32 # training and valid batch size
+  batch_size: 256 # training and valid batch size
   epoch_samples: original # number of samples considered as one epoch, if None, the whole dataset length is considered
   weighted_sampler_train: False
   weighted_sampler_val: False

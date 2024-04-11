@@ -7,15 +7,12 @@ import cv2
 import torch
 import numpy as np
 
-
-from src import INFERENCE_DIR, PIXELS_PER_IMAGE
+from src import INFERENCE_DIR
 import src.models.architectures as arch
 from src.data.dataset import data_transforms
 from src.visualization.display_annot import plot_bbox_annotations
-from src.models.load_pretrained_face_models import load_YOLO_model_face_recognition, load_HAAR_cascade_face_detection
+from src.models.load_pretrained_face_models import load_YOLO_model_face_recognition
 from src.models.inference_face_detection_model import detect_faces_YOLO, transform_bbox_to_square
-
-
 
 from config import wandbAPIkey
 
@@ -101,8 +98,25 @@ def infer_video(cap, face_detector, emotion_model, device, face_threshold = 0.5)
     cv2.destroyAllWindows()
 
 
+def load_models(wandb_id, face_detector_size = "medium"):
+    # Load the emotion model
+    wandb.login(key=wandbAPIkey)
+    api = wandb.Api()
+    artifact_dir = arch.get_wandb_artifact(wandb_id, api = api)
+    local_artifact = torch.load(os.path.join(artifact_dir, "model_best.pt"))
+    params = local_artifact["params"]
+    emotion_model, device = arch.model_creation(params['arch'], local_artifact['state_dict'])
+    emotion_model.eval()
+    # Load the face transforms
+    face_transforms = data_transforms(only_normalize = True, image_norm = params['image_norm'], resize = True)
+    
+    # Lastly load face detector
+    face_model = load_YOLO_model_face_recognition(size = face_detector_size, device = device)
+    return face_model, emotion_model, face_transforms, device
 
-def main(mode: str, file: str, wandb_id: str)-> None:
+
+
+def main(mode: str, file: str, wandb_id: str, face_detector_size:str)-> None:
     """Main function to run the inference of the model.
     Args:
         mode (str): The mode to be used for the inference.
@@ -110,18 +124,7 @@ def main(mode: str, file: str, wandb_id: str)-> None:
     Returns:
         None
     """
-    wandb.login(key=wandbAPIkey)
-    api = wandb.Api()
-    # Get emotion model
-    artifact_dir = arch.get_wandb_artifact(wandb_id, api = api)
-    local_artifact = torch.load(os.path.join(artifact_dir, "model_best.pt"))
-    params = local_artifact["params"]
-    model, device = arch.model_creation(params['arch'], local_artifact['state_dict'])
-    model.eval()
-    # Load the face detector
-    yolo_detector = load_YOLO_model_face_recognition(size = "medium", device = device)
-    face_transforms = data_transforms(only_normalize = True, image_norm = params['image_norm'], resize = True)
-
+    face_model, emotion_model, face_transforms, device = load_models(wandb_id, face_detector_size = face_detector_size)
     # Start with inference
     if mode == 'cam':
         cap = cv2.VideoCapture(0)
@@ -136,7 +139,8 @@ def main(mode: str, file: str, wandb_id: str)-> None:
             raise FileNotFoundError(f"File {path} not found")
         img = cv2.imread(path)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img = infer_image(img, yolo_detector, model, device, face_transforms)
+        img = infer_image(img, face_model, emotion_model, device, face_transforms)
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR) # Convert RGB to BGR to proper saving
         filename = os.path.join(INFERENCE_DIR, file.split('.')[0]+"inference.jpg")
         print("Saving in:", filename)
         cv2.imwrite(filename, img)
@@ -151,10 +155,11 @@ def parse_args():
     parser.add_argument('--mode', type=str, default='img', help='The training mode to be sweep or standard run')
     parser.add_argument('--file', type=str, default= 'test1.jpg', help= 'The file to be used for the inference. If mode is cam, it is ignored. If mode is video, it is the path to the video. If mode is img, it is the path to the image.')
     parser.add_argument('--wandb_id', type=str, default='iconic-sweep-19', help='Run id to take the model weights')
+    parser.add_argument('--face_detector_size', type=str, default='medium', help='Size of the face detector model to be used')
     return parser.parse_args()
 
 
 
 if __name__ == '__main__':
     args = parse_args()
-    main(args.mode, args.file, args.wandb_id)
+    main(args.mode, args.file, args.wandb_id, args.face_detector_size)

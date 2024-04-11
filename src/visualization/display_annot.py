@@ -12,7 +12,6 @@ from PIL import Image
 def plot_bbox_annotations(img, bbox_annot, format ="xywh", conf_threshold = 0, conf = None,  other_annot = None, display = True):
     """ Displays the bounding boxes and text annotations on the image. The standard format is xywh
     """
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)      # Convert BGR to RGB
     height, width, _ = img.shape
     # Define the parameters for the rectangle
     background_color = (0, 255, 0) # Green color in RGB

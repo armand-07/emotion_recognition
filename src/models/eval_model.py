@@ -15,13 +15,10 @@ from src import PROCESSED_AFFECTNET_DIR, NUMBER_OF_EMOT, MODELS_DIR, AFFECTNET_C
 from src.models import architectures as arch
 from src.models.train_model import validate
 from src.data.dataset import create_dataloader
+from src.models.POSTER_V2.main import *
 
 from config import wandbAPIkey
 
-class RecorderMeter1(object):
-    pass
-class RecorderMeter(object):
-    pass
 
 
 def main(wandb_id):   

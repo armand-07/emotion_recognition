@@ -5,6 +5,8 @@ from ultralytics import YOLO
 
 from src import MODELS_DIR  
 
+FACE_DETECT_DIR = os.path.join(MODELS_DIR, "face_recognition")
+
 
 def load_HAAR_cascade_face_detection():
     # Load HAAR cascade method
@@ -29,7 +31,7 @@ def load_HOG_SVM_cascade_face_detection():
 
 
 
-def download_YOLO_model_face_recognition(size="medium", directory=MODELS_DIR):
+def download_YOLO_model_face_recognition(size="medium", directory=FACE_DETECT_DIR):
     """ Downloads the pretrained model for the YOLO depending on specified size.
     """
     # URL of the file to be downloaded
@@ -45,13 +47,16 @@ def download_YOLO_model_face_recognition(size="medium", directory=MODELS_DIR):
     filename = url.split("/")[-1]
     response = requests.get(url)
 
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
     model_path = os.path.join(directory, filename)
     with open(model_path, mode="wb") as file:
         file.write(response.content)
 
 
 
-def load_YOLO_model_face_recognition(device, size = "medium",  directory=MODELS_DIR):
+def load_YOLO_model_face_recognition(device, size = "medium",  directory=FACE_DETECT_DIR):
     """ Downloads the pretrained model for the YOLO depending on specified size.
     """
     assert device is not None, "Please specify the device to use for the model."
