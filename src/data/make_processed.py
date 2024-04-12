@@ -17,7 +17,7 @@ import src.data.compute_AffectNet_norm_values as compute_normalization_values
 
 
 def generate_data(data_annot:pd.DataFrame, store_imgs:np.memmap, store_cat_emot:np.memmap, 
-                  store_cont_emot:np.memmap, params:dict):
+                  store_cont_emot:np.memmap, params:dict) -> None:
     """Generates the processed data and stores it in the memmap files. The ids are implicit in the order of the numpy array, 
     and this id is not equal to the original id. All the images are read and stored as a numpy array in the format [0-255]. 
     The categorical emotions are stored as a numpy array of int64. The continuous emotions are stored as a numpy array
@@ -56,7 +56,7 @@ def generate_data(data_annot:pd.DataFrame, store_imgs:np.memmap, store_cat_emot:
     store_cont_emot.flush()
 
 
-def generate_weights(data_annot:dict, output_path:str, datasplit:str):
+def generate_weights(data_annot:dict, output_path:str, datasplit:str) -> None:
     """Generates the weights of the categorical emotions and stores them in a tensor. It contains the 
     weights for each id in the datasplit based on the categorical emotions appearance in datasplit. 
     The weight is 1/count(cat_emot). 
@@ -89,7 +89,7 @@ def generate_weights(data_annot:dict, output_path:str, datasplit:str):
     torch.save(data_weights, os.path.join(output_path,'data_weights_' + datasplit + '.pt'))
 
 
-def process_datasplit(data_annot: pd.DataFrame, output_path:str, datasplit:str, params:dict):
+def process_datasplit(data_annot: pd.DataFrame, output_path:str, datasplit:str, params:dict) -> None:
     """From the interim datasplit annotations and the raw images, it generates the processed datasplit following 
     the 'params' specifications and stores it in a numpy memmap file. Concretly generates the following files:
     - datasplit_ids.dat: The ids of the images with the shape (N) and dtype int64
@@ -125,7 +125,7 @@ def process_datasplit(data_annot: pd.DataFrame, output_path:str, datasplit:str, 
     generate_weights(data_annot, output_path, datasplit)
 
 
-def preprocess_affectnet(output_path:str, params:dict):
+def preprocess_affectnet(output_path:str, params:dict) -> None:
     """Preprocesses the affectnet dataset and its corresponding datasplits and stores the processed results. 
     It generates the processed datasplits following the 'params' specifications, the interim annotations 
     and the raw images and stores the results in numpy memmap files. The original training split is used as 
@@ -166,7 +166,7 @@ def preprocess_affectnet(output_path:str, params:dict):
     compute_normalization_values.main(['train', 'val'], output_path)
 
 
-def main(params:dict):
+def main(params:dict) -> None:
     """Runs data preprocessing script to turn interim data and raw images into
     cleaned data ready to be forwarded to model with a memory efficient data 
     structure. The output directory is cleaned before the new data processed 

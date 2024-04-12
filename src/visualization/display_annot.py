@@ -13,6 +13,7 @@ def plot_bbox_annotations(img, bbox_annot, format ="xywh", conf_threshold = 0, c
     """ Displays the bounding boxes and text annotations on the image. The standard format is xywh
     """
     height, width, _ = img.shape
+    max_img_size = max(height, width)
     # Define the parameters for the rectangle
     background_color = (0, 255, 0) # Green color in RGB
     text_color = (0, 0, 0) # White color in RGB
@@ -42,15 +43,15 @@ def plot_bbox_annotations(img, bbox_annot, format ="xywh", conf_threshold = 0, c
             text = str(i)+":"+text
 
             # First set the thickness of the bbox
-            bbox_thickness = int(round(width / 500))
+            bbox_thickness = int(round(max_img_size / 500))
             bbox_thickness = max(1, bbox_thickness)
             # Add bbox
             cv2.rectangle(img, (x, y), (x+w, y+h), background_color, bbox_thickness)
             
             
             # Finds space required by the text so that we can put a correct background
-            font_scale = width / 1500
-            text_thickness = int(round(width / 750))
+            font_scale = max_img_size / 1500
+            text_thickness = int(round(max_img_size / 750))
             text_thickness = max(1, text_thickness) # Make sure text_thickness is at least 1
             (w_text, h_text), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX , font_scale, text_thickness) 
 
@@ -106,7 +107,7 @@ def display_img_annot_PAMI (sample_df, bbox_thickness = 2, font_size = 0.6):
         img = cv2.rectangle(img, (x1, y1), (x2, y2), color, bbox_thickness) 
         
         # For the text background
-        # Finds space required by the text so that we can put a background with that amount of width.
+        # Finds space required by the text so that we can put a background with that amount of max_img_size.
         (w, h), _ = cv2.getTextSize(str(person_id), cv2.FONT_HERSHEY_DUPLEX , font_size, int(bbox_thickness*0.5))
         # Prints the text.    
         img = cv2.rectangle(img, (x1, y1 - int(h*1.5)), (x1 + w, y1), color, -1)

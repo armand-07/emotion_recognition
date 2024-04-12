@@ -385,6 +385,7 @@ def model_creation(arch_type:str, weights:Union[str, dict] = "none", device = No
 
 
 def get_wandb_artifact(wandb_id:str, run:wandb.run = None, api = None):
+    
     print(f'Using trained model: {wandb_id}')
     try: # Try to download the model weights from name
         if not wandb_id.startswith("armand-07/TFG Facial Emotion Recognition/model_"):

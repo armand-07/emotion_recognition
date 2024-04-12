@@ -45,7 +45,9 @@ class AffectNetDataset(Dataset):
 
 
 class AffectNetDatasetValidation(Dataset):
-    def __init__(self, path:str, datasplit:str,  img_transforms:albumentations.Compose=None):
+    """AffectNet dataset for validation and test. The dataset is loaded in memory and the images are not transformed until 
+    "getitem" is called."""
+    def __init__(self, path:str, datasplit:str, img_transforms:albumentations.Compose = None):
         # Get datasplit size
         datasplit_sizes_df = pd.read_csv(os.path.join(path,"datasplit_sizes.csv"))
         self.datasplit_len = datasplit_sizes_df[datasplit_sizes_df['Datasplit'] == datasplit]['Size'].values[0]
@@ -75,7 +77,24 @@ class AffectNetDatasetValidation(Dataset):
     
 
 
-def data_transforms(only_normalize = False, daug_params = dict(), image_norm = "imagenet", resize = False):
+def data_transforms(only_normalize:bool = False, daug_params:dict = dict(), image_norm:str = "imagenet", resize:bool = False) -> albumentations.Compose:
+    """Create the data transformations for the images. The transformations are applied in the following order:
+        1. Horizontal flip
+        2. Shift, scale and rotate
+        3. Coarse dropout
+        4. Color jitter
+        5. Gaussian noise
+        6. Resize
+        7. Normalize
+        8. Convert to Pytorch tensor
+    Parameters:
+        - only_normalize: bool. If True, only the normalization is applied to the image
+        - daug_params: dict. Dictionary with the data augmentation parameters
+        - image_norm: str. The normalization method to apply to the image. Can be "imagenet", "affectnet" or "none"
+        - resize: bool. If True, the image is resized to 224x224
+    Returns:
+        - A.Compose object with the transformations to apply to the image
+    """
     transforms = []
     if not only_normalize:
         p_value = daug_params["daug_p_value"]
@@ -119,6 +138,21 @@ def data_transforms(only_normalize = False, daug_params = dict(), image_norm = "
 
 def create_dataloader(datasplit, batch_size, weighted_dataloader = False, epoch_samples = "original", 
                       daug_params = dict(), image_norm = "imagenet", num_workers = 4):
+    """Create a dataloader for the AffectNet dataset with the specified datasplit and batch size. The dataloader can be
+    weighted or not, depending on the weighted_dataloader parameter. The data augmentation parameters can be specified
+    with the daug_params parameter that is a dictionary. The image normalization can be specified with the image_norm parameter.
+    Parameters:
+        - datasplit: str. The datasplit to use. Can be "train", "val" or "test"
+        - batch_size: int. The batch size to use
+        - weighted_dataloader: bool. If True, a weighted dataloader is created
+        - epoch_samples: int or str. The number of samples to use in an epoch. If "original", the original number of samples
+            in the datasplit is used
+        - daug_params: dict. Dictionary with the data augmentation parameters
+        - image_norm: str. The normalization method to apply to the image. Can be "imagenet", "affectnet" or "none"
+        - num_workers: int. The number of workers to use in the dataloader. The recommended value is 4. 
+    Returns:
+        - DataLoader object with the AffectNet dataset
+    """
     # Only apply data augmentation on test and val if the weighted dataloader is used 
     if not weighted_dataloader and (datasplit == "test" or datasplit == "val"):
         transforms = data_transforms(only_normalize = True, daug_params = daug_params, image_norm = image_norm)
