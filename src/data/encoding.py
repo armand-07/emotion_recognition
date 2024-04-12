@@ -2,21 +2,11 @@ import torch.nn.functional as F
 import torch
 
 
-def soft_label_encoding(y, classes, epsilon=0.1):
-    y_soft = y * (1 - epsilon) + epsilon / classes
-    return y_soft
-
-
-def cat2one_hot(cat_emot, number_of_classes, format = 'hard_label', epsilon = 0.1):
+def cat2one_hot(cat_emot, number_of_classes):
     """ Convert the categorical emotion to a one-hot encoding. Depending on the format, the encoding can be a hard or soft label."""
     # Get the encoding of the categorical emotion
-    one_hot = F.one_hot(torch.tensor(cat_emot), num_classes=number_of_classes)
-    if format == 'hard_label':
-        return one_hot
-    elif format == 'soft_label':
-        return soft_label_encoding(cat_emot, number_of_classes, epsilon)
-    else:
-        assert False, "The given format is not valid."
+    one_hot = F.one_hot(torch.tensor(cat_emot), num_classes=number_of_classes).type(torch.float32)
+    return one_hot
 
 
 def onehot2cat(one_hot):

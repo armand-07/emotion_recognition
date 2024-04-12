@@ -2,22 +2,41 @@ preprocessing:
   random_seed: 33
   orig_datasets: ["affectnet"]
   train_split: 0.8 # val size split would be 1 - train_split
-  categorical_format: "hard_label" # Apply Gumbel-Softmax y_soft = F.gumbel_softmax(logits, tau=0.5)
   continuous_format: "cartesian"
-  face_detection_algorithm: "None" #"Haar Cascade Classifier"
 
-model:
-  random_seed: 33
-  image_norm: True
-  data_augmentation: True
-  algorithm_name: "Hubert_Classifier"
-  random_state: 33 #seed for reproducibility
-  batch_size: 256 # training and valid batch size
-  lr: 0.0001 # learning rate
+training:
+  random_seed: 33 #seed for reproducibility
+  daug_p_value: 0.5
+  daug_horizontalflip: True
+  daug_shiftscalerotate: True
+  daug_coarsedropout: True
+  daug_colorjitter: True
+  daug_gaussnoise: True
+  image_norm: "ImageNet"
+
+  distillation : False 
+  alpha: 0.5
+  decaying_strategy: 0
+  embedding_method: "both"
+  arch: "vit" # architecture name
+  teacher_arch: "efficientnet_b2"
+  pretraining: "imagenet"
+  batch_size: 224 # training and valid batch size
+  epoch_samples: original # number of samples considered as one epoch, if None, the whole dataset length is considered
+  weighted_sampler_train: False
+  weighted_sampler_val: False
+  weighted_loss: True
+  label_smoothing: 0.0
+
+  lr: '1e-7' # learning rate
   momentum: 0.9 # SGD momentum, for SGD only
-  optimizer: 'adam' # optimization method: sgd | adam
-  adapter_hidden_size: 128 # model hyperparameter
-  epochs: 20  # maximum number of epochs to train
+  optimizer: 'adamw' # optimization method: sgd | adam
+  epochs: 30  # maximum number of epochs to train
   patience: 5 # how many epochs of no loss improvement should we wait before stop training
-  log_interval: 15 # how many batches to wait before logging training status
-  
+
+
+eval:
+  random_seed: 33
+  arch: "poster"
+  image_norm: "imagenet"
+  weights: "affectnet_cat_emot"

@@ -1,14 +1,16 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import math
-from src import AFFECTNET_CAT_EMOT
+from src import AFFECTNET_CAT_EMOT, MODELS_DIR
 import pandas as pd
+from tqdm import tqdm 
 import altair as alt
+import plotly.express as px
 import torch
 from torch.distributions import Categorical
 
 
-def visualize_batch(img, cat_label = None, col = 8):
+def visualize_batch(img, cat_label = None, col = 8, adjust_to_vis_range = False):
     img = img.numpy().transpose((0, 2, 3, 1)) # Convert the image from [B,C,H,W] to [B,H,W,C]
     row = math.ceil(img.shape[0]/col)
     fig = plt.figure(figsize=(10,1.5*row))
@@ -19,10 +21,35 @@ def visualize_batch(img, cat_label = None, col = 8):
     
     for i in range(img.shape[0]):
         ax = fig.add_subplot(row, col, i+1, xticks=[], yticks=[])
+        if adjust_to_vis_range: # Adjust the image to the range [0, 1]
+            max_val = np.max (img)
+            min_val = np.min(img)
+            img = (img - min_val) / (max_val - min_val)
         ax.imshow(img[i])
         if cat_label is not None:
-            ax.set_title(AFFECTNET_CAT_EMOT[np.argmax(cat_label[i]).item()], fontsize=10)
+            ax.set_title(AFFECTNET_CAT_EMOT[cat_label[i].item()], fontsize=10)
     plt.show()
+
+
+def create_conf_matrix(conf_matrix):
+    """Create a confusion matrix using the plotly library."""
+    fig = px.imshow(conf_matrix,
+                labels=dict(y="True Emotion", x="Predicted Emotion", color="Percentage"),
+                x=AFFECTNET_CAT_EMOT,
+                y=AFFECTNET_CAT_EMOT,
+                color_continuous_scale='Blues',
+                zmin = 0.0,
+                zmax = 1.0,
+               )
+    fig.update_xaxes(side="top", tickangle=0, title_font=dict(size=14), tickfont=dict(size=9))
+    fig.update_yaxes(tickangle=0, title_font=dict(size=14), tickfont=dict(size=9))
+    fig.update_layout(
+    coloraxis_colorbar=dict(thickness=15, len = 0.8)
+    )
+    fig.update_traces(
+    hovertemplate='True Emotion: %{y}<br>Predicted Emotion: %{x}<br>Percentage: %{z:.4f}<extra></extra>'
+    )
+    return fig
 
 
 def compute_cat_label_batch_entropy(dataloader, NUMBER_OF_EMOT, title = 'Entropy through all batches'):
@@ -30,10 +57,9 @@ def compute_cat_label_batch_entropy(dataloader, NUMBER_OF_EMOT, title = 'Entropy
     """
     results = []
     max_entropy = - np.log(1/NUMBER_OF_EMOT) # uniform distribution
-    for i, (_, _ , cat_labels, _) in enumerate(dataloader):
-        cat_labels = np.argmax(cat_labels, axis=-1) # select the max categorical emotion in case a soft encoding has been applied
+    for i, (_ , cat_labels, _, _) in tqdm(enumerate(dataloader), total = len(dataloader)):
         # Count the occurrences of each label
-        counts = np.bincount(cat_labels)
+        counts = np.bincount(cat_labels.numpy())
         # Convert the counts into probabilities to get a distribution
         probs = counts / np.sum(counts)
         # Convert the numpy array to a PyTorch tensor

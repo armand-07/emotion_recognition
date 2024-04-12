@@ -9,11 +9,11 @@ from PIL import Image
 
 
 
-def plot_bbox_annotations(img, bbox_annot, format ="xywh", conf_threshold = 0, conf = None,  other_annot = None):
+def plot_bbox_annotations(img, bbox_annot, format ="xywh", conf_threshold = 0, conf = None,  other_annot = None, display = True):
     """ Displays the bounding boxes and text annotations on the image. The standard format is xywh
     """
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)      # Convert BGR to RGB
     height, width, _ = img.shape
+    max_img_size = max(height, width)
     # Define the parameters for the rectangle
     background_color = (0, 255, 0) # Green color in RGB
     text_color = (0, 0, 0) # White color in RGB
@@ -42,26 +42,31 @@ def plot_bbox_annotations(img, bbox_annot, format ="xywh", conf_threshold = 0, c
                 text = ""
             text = str(i)+":"+text
 
-            cv2.rectangle(img, (x, y), (x+w, y+h), background_color, 2)
-
-            # Set font_size and bbox_thickness as a fraction of the image's width
-            font_scale = width / 1000  # Adjust the denominator to get the desired font size
-            bbox_thickness = int(round(width / 200))# Adjust the denominator to get the desired thickness
-            bbox_thickness = max(1, bbox_thickness) # Make sure bbox_thickness is at least 1
-
-            # For the text background
-            # Finds space required by the text so that we can put a background with that amount of width.
+            # First set the thickness of the bbox
+            bbox_thickness = int(round(max_img_size / 500))
+            bbox_thickness = max(1, bbox_thickness)
+            # Add bbox
+            cv2.rectangle(img, (x, y), (x+w, y+h), background_color, bbox_thickness)
             
-            (w_text, h_text), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_DUPLEX , font_scale, bbox_thickness)
-            # Prints the text.    
-            img = cv2.rectangle(img, (x, y - int(h_text*1.5)), (x + w_text, y), background_color, -1)
-            img = cv2.putText(img, text, (x, y - 5),
-                                cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_color, int(bbox_thickness*0.75))
+            
+            # Finds space required by the text so that we can put a correct background
+            font_scale = max_img_size / 1500
+            text_thickness = int(round(max_img_size / 750))
+            text_thickness = max(1, text_thickness) # Make sure text_thickness is at least 1
+            (w_text, h_text), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX , font_scale, text_thickness) 
 
-    # Displaying the image  
-    plt.imshow(img)  
-    plt.axis('off')
-    plt.show()
+            # Add text and background above the bbox
+            img = cv2.rectangle(img, (x, y - int(h_text*1.5)), (x + w_text, y), background_color, -1)
+            img = cv2.putText(img, text, (x, y - int(h_text*0.3)),
+                                cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_color, int(text_thickness), lineType = cv2.LINE_AA)
+    if display:
+        # Displaying the image  
+        print("Displaying the image")
+        plt.imshow(img)
+        plt.axis('off')
+        plt.show()
+    else:
+        return img
 
 
 
@@ -102,7 +107,7 @@ def display_img_annot_PAMI (sample_df, bbox_thickness = 2, font_size = 0.6):
         img = cv2.rectangle(img, (x1, y1), (x2, y2), color, bbox_thickness) 
         
         # For the text background
-        # Finds space required by the text so that we can put a background with that amount of width.
+        # Finds space required by the text so that we can put a background with that amount of max_img_size.
         (w, h), _ = cv2.getTextSize(str(person_id), cv2.FONT_HERSHEY_DUPLEX , font_size, int(bbox_thickness*0.5))
         # Prints the text.    
         img = cv2.rectangle(img, (x1, y1 - int(h*1.5)), (x1 + w, y1), color, -1)

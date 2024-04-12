@@ -84,3 +84,15 @@ target/
 
 # Mypy cache
 .mypy_cache/
+
+# API keys
+config.py
+
+# Wandb
+wandb/
+
+# Artifacts
+artifacts/
+
+# Ignore Slurm output terminal history
+*.out
