@@ -1,5 +1,5 @@
 program: train_model.py
-name: ViT_pretrained_hyperparameter_tunning_weighted_batch
+name: ViT_pretrained_hyperparameter_tunning_weighted_loss
 method: random
 metric:
   goal: minimize
@@ -69,13 +69,13 @@ parameters:
       - 30
   weighted_sampler_train: 
     values:
-      - True
+      - False
   weighted_sampler_val: 
     values:
-      - True
+      - False
   weighted_loss:
     values:
-      - False
+      - True
   patience:
     values: 
       - 5

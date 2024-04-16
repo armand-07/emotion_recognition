@@ -10,12 +10,12 @@ import torch
 import numpy as np
 import albumentations
 
-from src import INFERENCE_DIR
+from src import INFERENCE_DIR, NUMBER_OF_EMOT
 import src.models.architectures as arch
 from src.data.dataset import data_transforms
-from src.visualization.display_annot import plot_bbox_annotations
+from src.visualization.display_annot import plot_bbox_emot
 from src.models.load_pretrained_face_models import load_YOLO_model_face_recognition
-from src.models.inference_face_detection_model import detect_faces_YOLO, transform_bbox_to_square
+from src.models.inference_face_detection_model import detect_faces_YOLO, track_faces_YOLO, transform_bbox_to_square
 
 from config import wandbAPIkey
 
@@ -32,65 +32,20 @@ def create_faces_batch(img, face_transforms, face_bboxes, device) -> torch.Tenso
     Returns:
         - torch.Tensor: The batch of face images on specified device.
     """
-    total_faces = len(face_bboxes)
-    face_bboxes = face_bboxes.astype(int)
+    total_faces = face_bboxes.shape[0]
     face_batch = torch.zeros((total_faces, 3, 224, 224)).to(device)
 
     for i in range(total_faces):
         # Take face from image
-        x, y, w, h = face_bboxes[i]
+        [x, y, w, h] = face_bboxes[i]
         face_img = img[y:y+h, x:x+w]
         face_batch[i] = face_transforms(image = face_img)['image']  # Apply transformations
     return face_batch
 
 
 
-def infer_image_debug(img:np.array, face_model, emotion_model:torch.nn.Module, device: torch.device, 
-                      face_transforms:albumentations.Compose, face_threshold:float = 0.5) -> np.array:
-    """Function to infer an image using the specified model and face detector. It prints the time taken to detect faces and predict emotions.
-    Args:
-        - img (np.array): The image to be inferred.
-        - face_model (YOLO): The face detector model.
-        - emotion_model (torch.nn.Module): The emotion model.
-        - face_transforms (albumentations.Compose): The face transforms.
-        - face_threshold (float): The threshold to be used for the face detector.
-    Returns:
-        - np.array: The image with the annotations.
-    """
-    start = time.time()
-    [faces_bbox_YOLO, confidence_YOLO] = detect_faces_YOLO(img, face_model, format = 'xywh-center')
-    end_detect_faces = time.time()
-    print(f"Time to detect faces: {end_detect_faces - start}")
-    
-    filtered_faces = faces_bbox_YOLO[confidence_YOLO > face_threshold]
-    img_height, img_width, _ = img.shape
-    filtered_faces = transform_bbox_to_square(filtered_faces, img_width, img_height)
-    print (f"Number of faces detected: {len(filtered_faces)}")
-    if len(filtered_faces) != 0:
-        start_detect_emotions = time.time()
-        face_batch = create_faces_batch(img, face_transforms, filtered_faces, device)
-        
-        with torch.no_grad():
-            face_batch.to(device)
-            output = emotion_model(face_batch)
-            labels = arch.get_predictions(output)
-            print(labels)
-        end_detect_emotions = time.time()
-        print(f"Time to predict emotions: {end_detect_emotions - start_detect_emotions}")
-        start_plot = time.time()
-        img = plot_bbox_annotations(img, filtered_faces, format = 'xywh', other_annot = labels, display = False)
-        end_plot = time.time()
-        print(f"Time to plot: {end_plot - start_plot}")
-    else:
-        print("No faces to be analyzed")
-        
-    print(f"Total time: {end_plot - start}")
-    return img
-
-
-
 def infer_image(img:np.array, face_model, emotion_model:torch.nn.Module, device: torch.device, 
-                face_transforms:albumentations.Compose, face_threshold:float = 0.5) -> np.array:
+                face_transforms:albumentations.Compose, face_threshold:float = 0.5) -> Tuple[np.array, torch.Tensor, np.array]:
     """Function to infer an image using the specified model and detector.
     Args:
         - img (np.array): The image to be inferred.
@@ -100,11 +55,18 @@ def infer_image(img:np.array, face_model, emotion_model:torch.nn.Module, device:
         - face_transforms (albumentations.Compose): The face transforms.
         - face_threshold (float): The threshold to be used for the face detector.
     Returns:
-        - np.array: The image with the annotations.
+        - 
     """
-    [faces_bbox_YOLO, confidence_YOLO] = detect_faces_YOLO(img, face_model, format = 'xywh-center')
-    filtered_faces = faces_bbox_YOLO[confidence_YOLO > face_threshold]
+    track = True
+    if track:
+        [faces_bbox, bbox_ids, confidence_YOLO] = track_faces_YOLO(img, face_model, format = 'xywh-center')
+    else:
+        [faces_bbox, confidence_YOLO] = detect_faces_YOLO(img, face_model, format = 'xywh-center')
+        bbox_ids = torch.Tensor(range(len(faces_bbox)))
 
+    filtered_faces = faces_bbox[confidence_YOLO > face_threshold]
+    filtered_ids = bbox_ids[confidence_YOLO > face_threshold]
+    
     if len(filtered_faces) != 0:
         img_height, img_width, _ = img.shape
         filtered_faces = transform_bbox_to_square(filtered_faces, img_width, img_height)
@@ -112,13 +74,40 @@ def infer_image(img:np.array, face_model, emotion_model:torch.nn.Module, device:
         
         with torch.no_grad():
             face_batch.to(device)
-            output = emotion_model(face_batch)
-            labels = arch.get_predictions(output)
-        img = plot_bbox_annotations(img, filtered_faces, format = 'xywh', other_annot = labels, display = False)
+            preds = emotion_model(face_batch) # Predict emotions returns a tensor with logits
     else:
         print("No faces to be analyzed")
+        preds = torch.empty(0).to(device)
+    
+    return filtered_faces, preds, filtered_ids
+
+
+
+def postprocessing_inference(people_detected, preds, ids, mode = 'standard', window_size = 15) -> Tuple[dict, torch.Tensor]:
+    """Function to update the people_detected dictionary with the new labels.
+    Args:
+        - people_detected (dict): The dictionary with the people detected.
+        - labels (list): The list of labels detected.
+    Returns:
         
-    return img
+    """
+    output_preds = torch.zeros((len(preds), NUMBER_OF_EMOT))
+    for i in range(len(preds)):
+        if ids[i] in people_detected:
+            people_detected[ids[i]].append(preds[i])
+            if len(people_detected[ids[i]]) > window_size:
+                people_detected[ids[i]] = people_detected[ids[i]][-window_size:]
+        else:
+            people_detected[ids[i]] = [preds[i]]
+        # Update the output_preds
+        if mode == 'standard':
+            output_preds[i, :] = preds[i, :]
+        elif mode == 'temporal_average':
+            output_preds[i] = torch.mean(torch.stack(people_detected[ids[i]]), dim = 0) # Compute mean accross each output logit
+        else:
+            raise ValueError(f"Invalid mode given for postprocessing inference: {mode}")
+
+    return people_detected, output_preds
 
 
 
@@ -136,7 +125,8 @@ def infer_stream(cap:cv2.VideoCapture, face_model, emotion_model: torch.nn.Modul
     while (cap.isOpened()):
         ret, frame = cap.read()
         if ret == True:
-            frame = infer_image(frame, face_model, emotion_model, device, face_transforms, face_threshold)
+            faces_bbox, labels, ids = infer_image(frame, face_model, emotion_model, device, face_transforms, face_threshold)
+            postprocessing_inference(faces_bbox, labels, ids)
             cv2.imshow('Frame', frame)
             if cv2.waitKey(25) & 0xFF == ord('q'): # Press Q on keyboard to exit
                 break
@@ -159,13 +149,25 @@ def infer_video_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, name:st
         - face_transforms (albumentations.Compose): The face transforms.
         - face_threshold (float): The threshold to be used for the face detector.
     Returns:
-        - None"""
+        - None
+    """
     # Read until video is completed
+    tracking = True 
+    if tracking:
+        people_detected = dict()
+
     for frame_id in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc = f'Analizing video "{name}"'):
         # Capture frame-by-frame
         ret, frame = cap.read() # ret is a boolean that returns True if the frame is available. frame is the image array.
         if ret == True:
-            frame = infer_image(frame, face_model, emotion_model, device, face_transforms, face_threshold)
+            faces_bbox, preds, ids = infer_image(frame, face_model, emotion_model, device, face_transforms, face_threshold)
+            ids = ids.cpu().numpy()
+            faces_bbox = faces_bbox.cpu().numpy()
+            if tracking:
+                mode = 'temporal_average'
+                people_detected, output_preds = postprocessing_inference(people_detected, preds, ids, mode, window_size=15)
+            labels = arch.get_predictions(output_preds)
+            frame = plot_bbox_emot(frame, faces_bbox, labels, ids, bbox_format ="xywh", display = False)
             # Write the frame into the output file
             output_cap.write(frame)
         else: # Break the loop
