@@ -1,7 +1,6 @@
 from typing import Union, Tuple
 import os
 
-
 import torchvision.models as models
 import torch.nn as nn
 from torch.nn import functional as F
@@ -32,7 +31,7 @@ def seed_everything(seed):
 
 
 
-def define_criterion(params, label_smoothing = 0.0, datasplit = 'train', distillation = False, device = 'cuda'):
+def define_criterion(params:dict, label_smoothing:float = 0.0, datasplit:str = 'train', distillation:bool = False, device = 'cuda'):
     # Define criterion
     if 'criterion' not in params:
         criterion_name = 'crossentropy'
@@ -58,7 +57,16 @@ def define_criterion(params, label_smoothing = 0.0, datasplit = 'train', distill
 
 
 
-def define_optimizer(model, optimizer_name, lr, momentum):     
+def define_optimizer(model:torch.nn.Module, optimizer_name:str, lr:float, momentum:float) -> torch.optim.Optimizer:
+    """Define the optimizer to use in the training of the model. The optimizer is defined by the optimizer_name,
+    the learning rate and the momentum. The function returns the optimizer to use in the training of the model.
+    Params:
+        - model (torch.nn.Module): The model to train.
+        - optimizer_name (str): The name of the optimizer to use. It can be 'adam', 'adamw', 'rmsprop', 'sgd' or 'none'.
+        - lr (float): The learning rate of the optimizer.
+        - momentum (float): The momentum of the optimizer. It is only used if the optimizer is 'rmsprop' or 'sgd'.
+    Returns:
+        - torch.optim.Optimizer: The optimizer to use in the training of the model."""   
     # Define optimizer
     optimizer_name = optimizer_name.lower()
     lr = float(lr)
@@ -78,30 +86,45 @@ def define_optimizer(model, optimizer_name, lr, momentum):
     
     return optimizer
 
-def get_distributions(output):
+
+
+def get_distributions(output:torch.Tensor) -> torch.Tensor:
+    """Get the distributions from the output of the model. The input is the output of the model in logits.
+        Params:
+            - output (torch.Tensor): The output of the model in logits.
+        Returns:
+            - torch.Tensor: The distributions of the predictions."""
     return F.softmax(output, dim=1)
 
-def get_predictions(output):
+
+
+def get_predictions(output:torch.Tensor) -> list:
+    """Get the predictions from the output of the model. The input is the output of the model in logits. 
+    The function returns a list with the labels of the predictions as a string.
+    Params:
+        - output (torch.Tensor): The output of the model in logits.
+    Returns:
+        - list: The list of the labels of the predictions.
+    """
     distrib = F.softmax(output, dim=1)
     label_indices = torch.argmax(distrib, dim=1).cpu().numpy()
     labels = [AFFECTNET_CAT_EMOT[i] for i in label_indices]
     return labels
-    
-
 
 
 
 class RearrangeLayer(nn.Module):
+    """Rearrange output neurons according to the order provided. It is done for the second dimension (dim=1) where the emotions are. 
+    As the first dimension is the batch size, it is not rearranged. The order is a tensor with the desired order of the emotions."""
     def __init__(self, order):
         super().__init__()
         self.order = order
-
     def forward(self, x):
-        # Rearrange the tensor according to the order provided for the second dimension (dim=1) where the emotions are
         return torch.index_select(x, 1, self.order)  
     
 
-def resnet34(pretrained = True, weights = "none"):
+
+def resnet34(pretrained:bool = True, weights:str = "none") -> torch.nn.Module:
     """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 2048"""
     if pretrained: # equivalent to ResNet50_Weights.IMAGENET1K_V1
         model = models.resnet34(weights = "DEFAULT")
@@ -115,7 +138,8 @@ def resnet34(pretrained = True, weights = "none"):
     return model
 
 
-def resnet50(pretrained = True, weights = "none"):
+
+def resnet50(pretrained:bool = True, weights:str = "none"):
     """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 2048"""
     if pretrained: # equivalent to ResNet50_Weights.IMAGENET1K_V1
         model = models.resnet50(weights = "DEFAULT")
@@ -128,7 +152,8 @@ def resnet50(pretrained = True, weights = "none"):
     return model
 
 
-def resnet101(pretrained = True, weights = "none"):
+
+def resnet101(pretrained:bool = True, weights:str = "none"):
     """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 2048"""
     if pretrained: # equivalent to ResNet50_Weights.IMAGENET1K_V1
         model = models.resnet101(weights = "DEFAULT")
@@ -143,7 +168,7 @@ def resnet101(pretrained = True, weights = "none"):
 
 
 
-def resnext50_32x4d (pretrained = True):
+def resnext50_32x4d (pretrained:bool = True) -> torch.nn.Module:
     """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 2048"""
     if pretrained:
         model = models.resnext50_32x4d(weights = "DEFAULT") # equivalent to ResNeXt50_32x4d_Weights.IMAGENET1K_V1
@@ -153,25 +178,8 @@ def resnext50_32x4d (pretrained = True):
     return model
 
 
-
-def vgg16(pretrained = True):
+def poster_v2(weights:str = "none") -> torch.nn.Module:
     """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 1000"""
-    model = models.vgg16(pretrained = pretrained) 
-    model.classifier[6] = nn.Linear(4096, NUMBER_OF_EMOT)
-    return model
-
-
-class RecorderMeter1(object):
-    pass
-class RecorderMeter(object):
-    pass
-
-
-def poster_v2(weights = "none"):
-    """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 1000"""
-    
-    RecorderMeter1()
-    RecorderMeter()
     
     # create model
     model = pyramid_trans_expr2(img_size=224, num_classes=8)
@@ -187,7 +195,7 @@ def poster_v2(weights = "none"):
 
 
 
-def efficientnet_b0(device, pretrained = True, weights = "none"):
+def efficientnet_b0(device:torch.device, pretrained = True, weights = "none") -> torch.nn.Module:
     """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 1280"""
     if weights.lower() == "none":
         model = timm.create_model('tf_efficientnet_b0_ns', pretrained = pretrained)
@@ -215,7 +223,7 @@ def efficientnet_b0(device, pretrained = True, weights = "none"):
 
 
 
-def efficientnet_b2(device, pretrained = True, weights = "none"):
+def efficientnet_b2(device:torch.device, pretrained:bool = True, weights:bool = "none") -> torch.nn.Module:
     """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 1408"""
     if weights.lower() == "none":
         model = timm.create_model('tf_efficientnet_b2_ns', pretrained = pretrained)
@@ -245,7 +253,7 @@ def efficientnet_b2(device, pretrained = True, weights = "none"):
 
 
 
-def ViT_base16(pretrained = True, weights = "none"):
+def ViT_base16(pretrained = True, weights = "none") -> torch.nn.Module:
     if pretrained: # pretraining on imagenet
         model = timm.create_model('vit_base_patch16_224', pretrained=True, num_classes = NUMBER_OF_EMOT)
     else:
@@ -283,7 +291,7 @@ class DeiT_model(nn.Module):
 
 
 
-def DeiT (size = "tiny", pretrained = True, weights = "none"):
+def DeiT (size = "tiny", pretrained = True, weights = "none") -> torch.nn.Module:
     if size == "tiny":
         model = timm.create_model('deit_tiny_distilled_patch16_224.fb_in1k', pretrained=pretrained, num_classes = NUMBER_OF_EMOT)
     elif size == "small":
@@ -301,7 +309,7 @@ def DeiT (size = "tiny", pretrained = True, weights = "none"):
 
 
 
-def model_creation(arch_type:str, weights:Union[str, dict] = "none", device = None) -> Tuple[torch.nn.Module, torch.device]:
+def model_creation(arch_type:str, weights:Union[str, dict] = "none", device:torch.device = None) -> Tuple[torch.nn.Module, torch.device]:
     """
     Create a model with the specified architecture and weights. If weights is not specified, 
     the model will be created with random weights. If a pretraining is given, the model will 

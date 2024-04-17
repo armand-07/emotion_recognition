@@ -1,15 +1,18 @@
-import cv2
-import matplotlib.pyplot as plt
-import os
 from pathlib import Path
-from src import INTERIM_DATA_DIR
 from prettytable import PrettyTable
+
+import cv2
+import numpy as np
 from random import randint
 from PIL import Image
+import matplotlib.pyplot as plt
+
+from src import INTERIM_DATA_DIR
 
 
-def plot_bbox_emot(img, bbox, labels, bbox_ids = None, bbox_format ="xywh", display = True):
-    """ Displays the bounding boxes and text annotations on the image. The standard format is xywh
+def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array = None, bbox_format:str ="xywh", 
+                   display:bool = True) -> np.array:
+    """ Displays the bounding boxes and emotion annotations
     """
     height, width, _ = img.shape
     max_img_size = max(height, width)
@@ -17,23 +20,25 @@ def plot_bbox_emot(img, bbox, labels, bbox_ids = None, bbox_format ="xywh", disp
     background_color = (0, 255, 0) # Green color in RGB
     text_color = (0, 0, 0) # White color in RGB
 
-    
-
     for i in range(len(bbox)):
         if bbox_format == "xywh":
-            [x, y, w, h] = bbox[i]
+            x, y, w, h = bbox[i].tolist()
+
         elif bbox_format == "xywh-center":
-            [x, y, w, h] = bbox[i]
+            x, y, w, h = bbox[i].tolist()
             x = x-int(w/2); 
             y = y-int(h/2)
         elif bbox_format == "xyxy":
-            [x, y, x2, y2] = bbox[i]
+            [x, y, x2, y2] = bbox[i].tolist()
             w = x2 - x
             h = y2 - y
         else:
             raise ValueError("The format of the bounding box is not valid. It must be 'xywh', 'xywh-center' or 'xyxy'")
-        if bbox_ids is not None:
-            text = str(bbox_ids[i])+":"+labels[i]
+        id = bbox_ids[i].item()
+        if id != -1 and bbox_ids is not None:
+            text = str(id)+":"+labels[i]
+        elif id == -1:
+            text = 'Unknown' # Unknown detection as the bbox_id is -1
         else:
             text = str(i)+":"+labels[i]
             

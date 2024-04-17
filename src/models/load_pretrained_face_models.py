@@ -2,6 +2,8 @@ import requests
 import os
 import cv2
 from ultralytics import YOLO
+import ultralytics
+import torch
 
 from src import MODELS_DIR  
 
@@ -31,11 +33,16 @@ def load_HOG_SVM_cascade_face_detection():
 
 
 
-def download_YOLO_model_face_recognition(size="medium", directory=FACE_DETECT_DIR):
-    """ Downloads the pretrained model for the YOLO depending on specified size.
+def download_YOLO_model_face_recognition(size:str = "medium", directory:str = FACE_DETECT_DIR) -> None:
+    """ Downloads the pretrained model for the YOLO depending on specified size. The author of the 
+    weights can be found in https://github.com/akanametov/yolov8-face 
+    Params:
+        - size(str): Size of the model to download. Possible values: nano, medium, large
+        - directory(str): Directory to save the downloaded model
+    Returns:
+        - None
     """
-    # URL of the file to be downloaded
-    # Replace with the URL of the YOLOv8 model
+    # URL of the file to be downloaded is defined
     if size == "nano":
         url = "https://github.com/akanametov/yolov8-face/releases/download/v0.0.0/yolov8n-face.pt"
     elif size == "medium":
@@ -56,7 +63,7 @@ def download_YOLO_model_face_recognition(size="medium", directory=FACE_DETECT_DI
 
 
 
-def load_YOLO_model_face_recognition(device, size = "medium",  directory=FACE_DETECT_DIR):
+def load_YOLO_model_face_recognition(device:torch.device, size:str = "medium",  directory:str = FACE_DETECT_DIR) -> ultralytics.YOLO:
     """ Downloads the pretrained model for the YOLO depending on specified size.
     """
     assert device is not None, "Please specify the device to use for the model."
@@ -78,6 +85,6 @@ def load_YOLO_model_face_recognition(device, size = "medium",  directory=FACE_DE
         download_YOLO_model_face_recognition(size=size, directory=directory)
 
     # Load the model
-    model = YOLO(model_path)
+    model = YOLO(model_path).to(device)
     
     return model

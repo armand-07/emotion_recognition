@@ -40,3 +40,12 @@ eval:
   arch: "poster"
   image_norm: "imagenet"
   weights: "affectnet_cat_emot"
+
+
+inference:
+  wandb_id_emotion_model: 'iconic-sweep-19'
+  face_detector_size: 'medium' 
+  face_threshold: 0.65
+  tracking: True
+  postprocessing: temporal_average
+  window_size: 15

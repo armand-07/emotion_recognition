@@ -4,11 +4,14 @@ import time
 import wandb
 from tqdm import tqdm
 from typing import Union, Tuple
+from pathlib import Path
+import yaml
 
 import cv2
 import torch
 import numpy as np
 import albumentations
+import ultralytics
 
 from src import INFERENCE_DIR, NUMBER_OF_EMOT
 import src.models.architectures as arch
@@ -21,16 +24,18 @@ from config import wandbAPIkey
 
 
 
-def create_faces_batch(img, face_transforms, face_bboxes, device) -> torch.Tensor:
-    """Create a batch of face images from the original image and a list of bounding boxes. 
-    Bounding boxes must be inside image and be integers. Ideally they must be in 1:1 format
-    Args:
+def create_faces_batch(img:np.array, face_transforms:albumentations.Compose, 
+                       face_bboxes:torch.Tensor, device:torch.device) -> torch.Tensor:
+    """Create a batch of face images from the original image and a tensor of bounding boxes. 
+    Bounding boxes must be inside image and be integers. Ideally they must be in 1:1 format.
+    Params:
         - img (np.array): The original image.
         - face_transforms (albumentations.Compose): The face transformations.
-        - face_bboxes (np.array): The list of bounding boxes.
+        - face_bboxes (torch.Tensor): The tensor of bounding boxes. It has shape [D,4], where D are the detections 
+            and the 4 elements are [x, y, w, h], where x,y are the coordinates of the top-left corner.
         - device (torch.device): The device to be used.
     Returns:
-        - torch.Tensor: The batch of face images on specified device.
+        - torch.Tensor: The batch of face images on specified device. It has shape [D, 3, 224, 224].
     """
     total_faces = face_bboxes.shape[0]
     face_batch = torch.zeros((total_faces, 3, 224, 224)).to(device)
@@ -44,9 +49,12 @@ def create_faces_batch(img, face_transforms, face_bboxes, device) -> torch.Tenso
 
 
 
-def infer_image(img:np.array, face_model, emotion_model:torch.nn.Module, device: torch.device, 
-                face_transforms:albumentations.Compose, face_threshold:float = 0.5) -> Tuple[np.array, torch.Tensor, np.array]:
-    """Function to infer an image using the specified model and detector.
+def infer_image(img:np.array, face_model:ultralytics.YOLO, emotion_model:torch.nn.Module, device: torch.device, 
+                face_transforms:albumentations.Compose, face_threshold:float = 0.65, 
+                tracking:bool = False) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Function to infer an image using the given emotion model, face detector and hyperparameters. It returns 
+    the faces detected with the bbox represented in x,y top-left corner format, the predictions of the model (logits) 
+    and the ids of the faces.
     Args:
         - img (np.array): The image to be inferred.
         - face_model (YOLO): The face detector model.
@@ -54,12 +62,14 @@ def infer_image(img:np.array, face_model, emotion_model:torch.nn.Module, device:
         - device (torch.device): The device to be used.
         - face_transforms (albumentations.Compose): The face transforms.
         - face_threshold (float): The threshold to be used for the face detector.
+        - tracking (bool): If True, it will track the faces.
+        - first_frame (bool): If True, it is the first frame of the video. It is only used for tracking
     Returns:
-        - 
+        - Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: The faces detected, the predictions of the model 
+            (logits) and the ids of the faces.
     """
-    track = True
-    if track:
-        [faces_bbox, bbox_ids, confidence_YOLO] = track_faces_YOLO(img, face_model, format = 'xywh-center')
+    if tracking:
+        [faces_bbox, bbox_ids, confidence_YOLO] = track_faces_YOLO(img, face_model, device = device, format = 'xywh-center')
     else:
         [faces_bbox, confidence_YOLO] = detect_faces_YOLO(img, face_model, format = 'xywh-center')
         bbox_ids = torch.Tensor(range(len(faces_bbox)))
@@ -71,39 +81,49 @@ def infer_image(img:np.array, face_model, emotion_model:torch.nn.Module, device:
         img_height, img_width, _ = img.shape
         filtered_faces = transform_bbox_to_square(filtered_faces, img_width, img_height)
         face_batch = create_faces_batch(img, face_transforms, filtered_faces, device)
-        
         with torch.no_grad():
             face_batch.to(device)
             preds = emotion_model(face_batch) # Predict emotions returns a tensor with logits
-    else:
-        print("No faces to be analyzed")
+    else: # If no faces are detected, return empty tensors
         preds = torch.empty(0).to(device)
     
     return filtered_faces, preds, filtered_ids
 
 
 
-def postprocessing_inference(people_detected, preds, ids, mode = 'standard', window_size = 15) -> Tuple[dict, torch.Tensor]:
-    """Function to update the people_detected dictionary with the new labels.
+def postprocessing_inference(people_detected:dict, preds:torch.Tensor, bbox_ids:torch.Tensor, 
+                             mode:str = 'standard', window_size:int = 15) -> Tuple[dict, torch.Tensor]:
+    """Function to update the people_detected dictionary with the new predictions and return the output predictions based 
+    on the post processing mode.
     Args:
-        - people_detected (dict): The dictionary with the people detected.
-        - labels (list): The list of labels detected.
+        - people_detected (dict): The dictionary with the people detected. It has as key the id of the face 
+        and as value a list of the logits of the model. It stores the window_size last logits.
+        - preds (torch.Tensor): The predictions of the model. It has shape [D, NUMBER_OF_EMOT], where D are the detections.
+        - bbox_ids (torch.Tensor): The ids of the faces. It has shape [D].
+        - mode (str): The mode to be used for the postprocessing. It can be 'standard' or 'temporal_average'.
+        - window_size (int): The size of the window to be saved in the people detected. 
     Returns:
-        
+        - dict: The updated people_detected dictionary. It has the id as key and the list of logits as value. It stores the 
+            window_size last logits.
+        - torch.Tensor: The updated labels list. It has shape [D, NUMBER_OF_EMOT], where D are the detections. They are logits.  
     """
     output_preds = torch.zeros((len(preds), NUMBER_OF_EMOT))
     for i in range(len(preds)):
-        if ids[i] in people_detected:
-            people_detected[ids[i]].append(preds[i])
-            if len(people_detected[ids[i]]) > window_size:
-                people_detected[ids[i]] = people_detected[ids[i]][-window_size:]
+        id = bbox_ids[i].item()
+        if id != -1:
+            if id in people_detected:
+                people_detected[id].append(preds[i])
+                if len(people_detected[id]) > window_size:
+                    people_detected[id] = people_detected[id][-window_size:]
+            else:
+                people_detected[id] = [preds[i]]
         else:
-            people_detected[ids[i]] = [preds[i]]
+            print("No tracking id assigned to bounding box")
         # Update the output_preds
         if mode == 'standard':
             output_preds[i, :] = preds[i, :]
         elif mode == 'temporal_average':
-            output_preds[i] = torch.mean(torch.stack(people_detected[ids[i]]), dim = 0) # Compute mean accross each output logit
+            output_preds[i] = torch.mean(torch.stack(people_detected[id]), dim = 0) # Compute mean accross each output logit
         else:
             raise ValueError(f"Invalid mode given for postprocessing inference: {mode}")
 
@@ -111,23 +131,50 @@ def postprocessing_inference(people_detected, preds, ids, mode = 'standard', win
 
 
 
-def infer_stream(cap:cv2.VideoCapture, face_model, emotion_model: torch.nn.Module, device: torch.device, 
-                face_transforms:albumentations.Compose, face_threshold:float = 0.5) -> None:
+def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_model: torch.nn.Module, device: torch.device, 
+                face_transforms:albumentations.Compose, params:dict) -> None:
     """Function to make inference in a video stream. It shows the results in a window.
-    Args:
+   Args:
         - cap (cv2.VideoCapture): The video capture object.
-        - face_model (YOLO): The face detector model.
+        - face_model (ultralytics.YOLO): The face detector model.
         - emotion_model (torch.nn.Module): The emotion model.
+        - device (torch.device): The device to be used.
         - face_transforms (albumentations.Compose): The face transforms.
-        - face_threshold (float): The threshold to be used for the face detector.
+        - params (dict): The parameters to be used for the inference.
     Returns:
-        - None"""
+        - None
+    """
+    # Read until video is completed
+    if params['tracking']:
+        people_detected = dict()
+    first_frame = True
+
+    frame_counter = 0
+    fps_camera = cap.get(cv2.CAP_PROP_FPS)  
+    fps_target = 10
+    frame_skip = fps_camera // fps_target
+
     while (cap.isOpened()):
         ret, frame = cap.read()
         if ret == True:
-            faces_bbox, labels, ids = infer_image(frame, face_model, emotion_model, device, face_transforms, face_threshold)
-            postprocessing_inference(faces_bbox, labels, ids)
-            cv2.imshow('Frame', frame)
+            frame_counter += 1
+            if frame_counter % frame_skip == 0: # Infer only if needed
+                faces_bbox, preds, ids = infer_image(frame, face_model, emotion_model, device, face_transforms, 
+                                                    params['face_threshold'], params['tracking'], first_frame)
+                first_frame = False
+                ids = ids.cpu().numpy()
+                faces_bbox = faces_bbox.cpu().numpy()
+                if params['tracking']:
+                    people_detected, output_preds = postprocessing_inference(people_detected, preds, ids, 
+                                                                            params['postprocessing'], params['window_size'])
+                else: 
+                    if params['postprocessing'] != 'standard':
+                        raise ValueError(f"Invalid postprocessing mode given: {params['postprocessing']}")
+                    output_preds = preds
+                labels = arch.get_predictions(output_preds)
+                frame = plot_bbox_emot(frame, faces_bbox, labels, ids, bbox_format ="xywh", display = False)
+                cv2.imshow('Frame', frame)
+            
             if cv2.waitKey(25) & 0xFF == ord('q'): # Press Q on keyboard to exit
                 break
         else:
@@ -137,7 +184,7 @@ def infer_stream(cap:cv2.VideoCapture, face_model, emotion_model: torch.nn.Modul
 
 def infer_video_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, name:str, face_model, 
                      emotion_model: torch.nn.Module, device: torch.device, face_transforms: albumentations.Compose, 
-                     face_threshold = 0.5) -> None:
+                     params:dict) -> None:
     """Function to make inference in a video and save the result in capturer.
     Args:
         - cap (cv2.VideoCapture): The video capture object.
@@ -147,42 +194,45 @@ def infer_video_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, name:st
         - emotion_model (torch.nn.Module): The emotion model.
         - device (torch.device): The device to be used.
         - face_transforms (albumentations.Compose): The face transforms.
-        - face_threshold (float): The threshold to be used for the face detector.
+        - params (dict): The parameters to be used for the inference.
     Returns:
         - None
     """
     # Read until video is completed
-    tracking = True 
-    if tracking:
+    if params['tracking']:
         people_detected = dict()
-
+        people_detected[-1] = [torch.ones(NUMBER_OF_EMOT).to(device)] # If no tracking id, it returns a uniform distribution
+    
     for frame_id in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc = f'Analizing video "{name}"'):
         # Capture frame-by-frame
         ret, frame = cap.read() # ret is a boolean that returns True if the frame is available. frame is the image array.
         if ret == True:
-            faces_bbox, preds, ids = infer_image(frame, face_model, emotion_model, device, face_transforms, face_threshold)
-            ids = ids.cpu().numpy()
-            faces_bbox = faces_bbox.cpu().numpy()
-            if tracking:
-                mode = 'temporal_average'
-                people_detected, output_preds = postprocessing_inference(people_detected, preds, ids, mode, window_size=15)
+            faces_bbox, preds, ids = infer_image(frame, face_model, emotion_model, device, face_transforms, 
+                                                 params['face_threshold'], params['tracking'])
+            if params['tracking']:
+                people_detected, output_preds = postprocessing_inference(people_detected, preds, ids, 
+                                                                         params['postprocessing'], params['window_size'])
+            else: 
+                if params['postprocessing'] != 'standard': # If tracking is disabled, only standard postprocessing is allowed
+                    raise ValueError(f"Invalid postprocessing mode given: {params['postprocessing']}")
+                output_preds = preds
             labels = arch.get_predictions(output_preds)
             frame = plot_bbox_emot(frame, faces_bbox, labels, ids, bbox_format ="xywh", display = False)
             # Write the frame into the output file
             output_cap.write(frame)
-        else: # Break the loop
+        else: # Break the loop if video has ended
             break
 
 
 
 def load_models(wandb_id:str, face_detector_size:str = "medium") -> Tuple[
-    torch.nn.Module, torch.nn.Module, albumentations.Compose, torch.device]:
+    ultralytics.YOLO, torch.nn.Module, albumentations.Compose, torch.device]:
     """Function to load the models and the face detector.
     Args:
         - wandb_id (str): The id of the wandb run to be used.
         - face_detector_size (str): The size of the face detector model to be used.
     Returns:
-        - face_model (YOLO): The face detector model.
+        - face_model (ultralytics.YOLO): The face detector model.
         - emotion_model (torch.nn.Module): The emotion model.
         - face_transforms (albumentations.Compose): The face transforms.
         - device (torch.device): The device to be used.
@@ -204,7 +254,7 @@ def load_models(wandb_id:str, face_detector_size:str = "medium") -> Tuple[
 
 
 
-def process_file(input_path:str, output_dir:str, face_model, emotion_model, device, face_transforms) -> None:
+def process_file(input_path:str, output_dir:str, face_model, emotion_model, device, face_transforms, params) -> None:
     """Function to process a file, either an image or a video. It saves the results in the output_dir.
     Args:
         - input_path (str): The path to the file to be processed.
@@ -214,20 +264,26 @@ def process_file(input_path:str, output_dir:str, face_model, emotion_model, devi
         - device (torch.device): The device to be used.
         - face_transforms (albumentations.Compose): The face transforms.
     Returns:
-        - None"""
+        - None 
+    """
     if input_path.endswith('.jpg') or input_path.endswith('.png'):
+        # Read image
         img = cv2.imread(input_path)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        # Make inference
         start = time.time()
-        img = infer_image(img, face_model, emotion_model, device, face_transforms)
+        faces_bbox, output_preds, ids = infer_image(img, face_model, emotion_model, device, face_transforms, 
+                                                 params['face_threshold'], params['tracking'], first_frame=True)
+        labels = arch.get_predictions(output_preds)
+        frame = plot_bbox_emot(frame, faces_bbox, labels, ids, bbox_format ="xywh", display = False)
         end = time.time()
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR) # Convert RGB to BGR to proper saving
         # Define the output path
         name = os.path.basename(input_path).split('.')[0]
         output_filename = os.path.join(output_dir, name+"_inference.jpg")
         if os.path.exists(output_filename):
             os.remove(output_filename)
         # Save the image
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR) # Convert RGB to BGR to proper saving
         cv2.imwrite(output_filename, img)
         print("Saving in:", output_filename)
         print(f"The time needed to process the photo: {end - start:.2f}s")
@@ -248,10 +304,9 @@ def process_file(input_path:str, output_dir:str, face_model, emotion_model, devi
         # Define the codec and create VideoWriter object
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         output_cap = cv2.VideoWriter(output_filename, fourcc, fps, (frame_width, frame_height))
-        
         # Make inference
         start = time.time()
-        infer_video_save(cap, output_cap, name, face_model, emotion_model, device, face_transforms)
+        infer_video_save(cap, output_cap, name, face_model, emotion_model, device, face_transforms, params)
         end = time.time()
         # Store results and release the video capture object
         cap.release()
@@ -263,21 +318,32 @@ def process_file(input_path:str, output_dir:str, face_model, emotion_model, devi
     
     else:
         raise ValueError(f"Invalid archive type given: {os.path.basename(input_path).split('.')[1]}")
-    
 
 
-def main(mode: str, input_path: str, output_dir:str, wandb_id: str, face_detector_size:str) -> None:
-    """Main function to run the inference of the model.
+
+def main(mode: str, input_path: str, output_dir:str) -> None:
+    """Main function to run the inference of the model. It can make streaming inference, on a set of files or only a file.
     Args:
-        mode (str): The mode to be used for the inference.
-        file (str): The file to be used for the inference.
+        - mode (str): The mode to be used for the inference.
+        - input_path (str): The input file to be used for the inference.
+        - output_dir (str): The directory to save the results.
     Returns:
-        None
+        - None
     """
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+    # Path of the parameters file
+    params_path = Path("params.yaml")
+    # Read data preparation parameters
+    with open(params_path, "r", encoding='utf-8') as params_file:
+        try:
+            params = yaml.safe_load(params_file)
+            params = params["inference"]
+        except yaml.YAMLError as exc:
+            print(exc)
+    params['job_type'] = "test"
 
-    face_model, emotion_model, face_transforms, device = load_models(wandb_id, face_detector_size = face_detector_size)
+    face_model, emotion_model, face_transforms, device = load_models(params['wandb_id_emotion_model'],params['face_detector_size'])
     # Start with inference
     if mode == 'stream':
         cap = cv2.VideoCapture(0)
@@ -287,12 +353,16 @@ def main(mode: str, input_path: str, output_dir:str, wandb_id: str, face_detecto
         if os.path.isdir(input_path):
             print(f"Found a directory")
             files = os.listdir(input_path)
+            first_execution = True
             for file in files:
                 input_file_path = os.path.join(input_path, file)
-                process_file(input_file_path, output_dir, face_model, emotion_model, device, face_transforms)
+                if params['tracking'] and not first_execution: # If tracking is enabled, it needs to restart the tracking by realoading the model
+                    face_model = load_YOLO_model_face_recognition(size = params['face_detector_size'], device = device)
+                process_file(input_file_path, output_dir, face_model, emotion_model, device, face_transforms, params)
+                first_execution = False
         elif os.path.isfile(input_path):
             print(f"Found an archive")
-            process_file(input_path, output_dir, face_model, emotion_model, device, face_transforms)
+            process_file(input_path, output_dir, face_model, emotion_model, device, face_transforms, params)
         else:
             print(f"{input_path} is neither a directory nor an archive file")
 
@@ -307,12 +377,10 @@ def parse_args():
     parser.add_argument('--mode', type=str, default='save', help='Process to stream results from camera, or make inference to saved img or video')
     parser.add_argument('--input_path', type=str, default = 'test', help= 'The file to be used for the inference. If mode is cam, it is ignored. If mode is video or img, it is the path to the archive.')
     parser.add_argument('--output_dir', type=str, default = os.path.join(INFERENCE_DIR, 'output'), help= 'Directory to save results')
-    parser.add_argument('--wandb_id', type=str, default='iconic-sweep-19', help='Run id to take the model weights')
-    parser.add_argument('--face_detector_size', type=str, default='medium', help='Size of the face detector model to be used')
     return parser.parse_args()
 
 
 
 if __name__ == '__main__':
     args = parse_args()
-    main(args.mode, args.input_path, args.output_dir, args.wandb_id, args.face_detector_size)
+    main(args.mode, args.input_path, args.output_dir)
