@@ -410,6 +410,8 @@ def model_training(params = None):
     for epoch in range(params['epochs']):
         if distillation:
             decaying_strategy = int(params['decaying_strategy'])
+            print(f'Decaying strategy: {decaying_strategy}')
+            print("Alpha:", alpha)
             if decaying_strategy == 0:
                 alpha = params['alpha']
             elif decaying_strategy == 1:
@@ -495,7 +497,7 @@ def main(mode, wandb_id):
         
     elif mode == 'sweep':
         # Path of the parameters file
-        config_sweep_path = Path("config_vit_pretrained_weighted_loss.yaml")
+        config_sweep_path = Path("config_deit_tiny_posterV2_hyperparameter_tunning_weighted_batch.yaml")
         # Read data preparation parameters
         with open(config_sweep_path, "r", encoding='utf-8') as config_file:
             try:

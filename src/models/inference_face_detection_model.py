@@ -43,14 +43,26 @@ def transform_bbox_to_square(bboxes: torch.Tensor, img_width:int, img_height:int
     return bboxes
 
 
-def detect_faces_YOLO(img, pretrained_model, format = 'xywh', verbose=False) -> ultralytics.YOLO:
-    """ Detects faces in an image using the given YOLO pretrained model. 
-    Returns in standard bbox format: [x, y, w, h], where x,y are the coordinates of the top-left corner. And the condifece of the detection.
+
+def detect_faces_YOLO(img, pretrained_model, format = 'xywh', verbose=False) -> Tuple[
+    torch.Tensor, torch.Tensor]:
+    """ Detects faces in an image using the given YOLO pretrained model. The bbox is returned 
+    with the specified bbox format.
+    Params:
+        - img: Image to detect faces
+        - pretrained_model: YOLO model
+        - format: Format of the bbox returned. Options: 'xywh-center', 'xywh', 'xyxy'
+        - verbose: If True, it prints model information
+    Returns:
+        - boxes: Bounding boxes of the detected faces
+        - conf: Confidence of the detection
     """
     # Make inference
     results = pretrained_model.predict(img, verbose = verbose)
+    # Get confidence of detection
+    conf = results[0].boxes.conf.cpu()
 
-    # Extract the bounding boxes and probabilities for the image
+    # Extract the bounding boxes
     if format == 'xywh-center':
         boxes = results[0].boxes.xywh
     elif format == 'xywh':
@@ -62,12 +74,10 @@ def detect_faces_YOLO(img, pretrained_model, format = 'xywh', verbose=False) -> 
     else:
         raise ValueError('Format not supported')
     
-    conf = results[0].boxes.conf
-
-    boxes = boxes.cpu().numpy()
-    conf = conf.cpu().numpy()
+    boxes = boxes.type(torch.int).cpu()
 
     return boxes, conf
+
 
 
 def track_faces_YOLO(img:np.array, pretrained_model:ultralytics.YOLO, format = 'xywh', verbose=False, device = 'cuda') -> Tuple[
