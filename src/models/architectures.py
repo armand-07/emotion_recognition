@@ -195,7 +195,7 @@ def poster_v2(weights:str = "none") -> torch.nn.Module:
 
 
 
-def efficientnet_b0(device:torch.device, pretrained = True, weights = "none") -> torch.nn.Module:
+def efficientnet_b0(device:torch.device, pretrained:bool = True, weights:str = "none") -> torch.nn.Module:
     """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 1280"""
     if weights.lower() == "none":
         model = timm.create_model('tf_efficientnet_b0_ns', pretrained = pretrained)
@@ -223,7 +223,7 @@ def efficientnet_b0(device:torch.device, pretrained = True, weights = "none") ->
 
 
 
-def efficientnet_b2(device:torch.device, pretrained:bool = True, weights:bool = "none") -> torch.nn.Module:
+def efficientnet_b2(device:torch.device, pretrained:bool = True, weights:str = "none") -> torch.nn.Module:
     """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 1408"""
     if weights.lower() == "none":
         model = timm.create_model('tf_efficientnet_b2_ns', pretrained = pretrained)
@@ -253,7 +253,7 @@ def efficientnet_b2(device:torch.device, pretrained:bool = True, weights:bool = 
 
 
 
-def ViT_base16(pretrained = True, weights = "none") -> torch.nn.Module:
+def ViT_base16(pretrained:bool = True, weights:str = "none") -> torch.nn.Module:
     if pretrained: # pretraining on imagenet
         model = timm.create_model('vit_base_patch16_224', pretrained=True, num_classes = NUMBER_OF_EMOT)
     else:
@@ -291,7 +291,7 @@ class DeiT_model(nn.Module):
 
 
 
-def DeiT (size = "tiny", pretrained = True, weights = "none") -> torch.nn.Module:
+def DeiT (size:str = "tiny", pretrained:bool = True, weights:str = "none") -> torch.nn.Module:
     if size == "tiny":
         model = timm.create_model('deit_tiny_distilled_patch16_224.fb_in1k', pretrained=pretrained, num_classes = NUMBER_OF_EMOT)
     elif size == "small":

@@ -46,7 +46,7 @@ parameters:
     values: [0.00001, 0.000005, 0.000001, 0.0000005, 0.0000001]
     distribution: categorical
   batch_size:
-    values: [64, 96, 128, 160, 192]
+    values: [64, 96, 128, 160, 192, 224]
     distribution: categorical
   optimizer:
     values: 

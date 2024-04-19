@@ -163,12 +163,12 @@ def save_val_wandb_metrics(acc1, acc2, val_loader, batch_size, all_targets, all_
 
 
 
-def save_val_wandb_metrics_dist(acc1, val_loader, batch_size, all_targets, all_preds_dist, 
+def save_val_wandb_metrics_dist(acc1, acc2, val_loader, batch_size, all_targets, all_preds_dist, 
                            all_preds_labels, global_epoch_loss, epoch, global_cosine_sim,
                            run):
     # Compute the metrics
-    acc1 = acc1.item()/(len(val_loader) * batch_size) # Log the accuracy
-    acc2 = top_k_accuracy_score(all_targets.numpy(), all_preds_dist.numpy(), k=2, normalize=True) # Log the top-2 accuracy
+    acc1 = acc1.compute().item()
+    acc2 = acc2.compute().item()
     global_epoch_loss = global_epoch_loss /(len(val_loader) * batch_size) # Mean loss
     f1_score = multiclass_f1_score(input=all_preds_labels, target=all_targets, num_classes=NUMBER_OF_EMOT).item() # F1-Score
     cohen_kappa = cohen_kappa_score(all_targets, all_preds_labels) # Cohen Kappa coefficient

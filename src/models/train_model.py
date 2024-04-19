@@ -23,6 +23,7 @@ from src import MODELS_DIR
 from src.data.dataset import create_dataloader
 from src.models import architectures as arch
 from src.models.metrics import save_val_wandb_metrics, save_val_wandb_metrics_dist
+from src.models.POSTER_V2.main import *
 
 from config import wandbAPIkey
 
@@ -177,7 +178,6 @@ def validate(val_loader: DataLoader, model: torch.nn.Module, criterion: torch.nn
     acc2 = MulticlassAccuracy(device=device, k = 2)
     all_preds_labels = torch.empty(0, device = 'cpu')
     all_preds_distrib = torch.empty(0, device = 'cpu')
-    softmax = nn.Softmax(dim=1)
     all_targets = torch.empty(0, device = 'cpu')
     global_epoch_loss = 0.0
     
@@ -202,7 +202,7 @@ def validate(val_loader: DataLoader, model: torch.nn.Module, criterion: torch.nn
 
             # Store the predictions and targets to compute metrics
             all_preds_labels = torch.cat((all_preds_labels, predicted_label.cpu())) 
-            all_preds_distrib = torch.cat((all_preds_distrib, softmax(prediction).cpu())) # Apply softmax to the predictions as they are in logits
+            all_preds_distrib = torch.cat((all_preds_distrib, F.softmax(prediction, dim=1).cpu())) # Apply softmax to the predictions as they are in logits
             all_targets = torch.cat((all_targets, cat_target.cpu()))
             
             if i % 100 == 0: # Print the metrics every 100 batches
@@ -238,7 +238,6 @@ def validate_distillation(val_loader: DataLoader, model: torch.nn.Module, criter
     acc2 = MulticlassAccuracy(device=device, k = 2)
     all_preds_labels = torch.empty(0, device = 'cpu')
     all_preds_dist = torch.empty(0, device = 'cpu')
-    softmax = nn.Softmax(dim=1)
     all_targets = torch.empty(0, device = 'cpu')
     global_epoch_loss = 0.0
     cos_sim = nn.CosineSimilarity(dim=1, eps=1e-6)
@@ -273,7 +272,7 @@ def validate_distillation(val_loader: DataLoader, model: torch.nn.Module, criter
 
             # Store the predictions and targets to compute metrics
             all_preds_labels = torch.cat((all_preds_labels, predicted_label.cpu())) 
-            all_preds_dist = torch.cat((all_preds_dist, softmax(prediction).cpu())) # Apply softmax to the predictions as they are in logits
+            all_preds_dist = torch.cat((all_preds_dist, F.softmax(prediction, dim=1).cpu())) # Apply softmax to the predictions as they are in logits
             all_targets = torch.cat((all_targets, cat_target.cpu()))
             
             if i % 100 == 0: # Print the metrics every 100 batches
@@ -281,9 +280,8 @@ def validate_distillation(val_loader: DataLoader, model: torch.nn.Module, criter
                 tqdm.write(f'VAL [{i+1}/{len(val_loader)}], Batch accuracy: {acc_batch:.2f}%; Batch Loss: {loss.item():.3f}')
         
         # Compute metrics
-        metrics = save_val_wandb_metrics_dist(acc1, val_loader, batch_size, all_targets, all_preds_dist, 
-                           all_preds_labels, global_epoch_loss, epoch, global_cosine_sim,
-                           run)
+        metrics = save_val_wandb_metrics_dist(acc1, acc2, val_loader, batch_size, all_targets, all_preds_dist, 
+                           all_preds_labels, global_epoch_loss, epoch, global_cosine_sim, run)
     return metrics
 
 
@@ -395,7 +393,7 @@ def model_training(params = None):
         distillation = True
         model_teacher, _ = arch.model_creation(params['teacher_arch'], weights = 'affectnet_cat_emot', device = device)
         model_teacher.eval()
-        criterion_distill = arch.define_criterion(params, params['label_smoothing_dist'], 'train', distillation = True, device = device)
+        criterion_distill = arch.define_criterion(params, 0.0, 'train', distillation = True, device = device)
         alpha = params['alpha']
     else:
         distillation = False
