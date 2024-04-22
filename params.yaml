@@ -38,7 +38,7 @@ training:
 eval:
   random_seed: 33
   arch: "poster"
-  image_norm: "imagenet"
+  image_norm: "affectnet"
   weights: "affectnet_cat_emot"
 
 

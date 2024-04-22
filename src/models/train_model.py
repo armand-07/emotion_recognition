@@ -495,7 +495,7 @@ def main(mode, wandb_id):
         
     elif mode == 'sweep':
         # Path of the parameters file
-        config_sweep_path = Path("config_deit_tiny_posterV2_hyperparameter_tunning_weighted_batch.yaml")
+        config_sweep_path = Path("config_deit_tiny_posterV2_hyperparameter_tunning_weighted_loss.yaml")
         # Read data preparation parameters
         with open(config_sweep_path, "r", encoding='utf-8') as config_file:
             try:

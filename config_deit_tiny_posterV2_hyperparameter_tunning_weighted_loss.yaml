@@ -67,13 +67,13 @@ parameters:
       - 30
   weighted_sampler_train: 
     values:
-      - True
+      - False
   weighted_sampler_val: 
     values:
-      - True
+      - False
   weighted_loss:
     values:
-      - False
+      - True
   patience:
     values: 
       - 5
@@ -92,10 +92,10 @@ parameters:
     distribution: uniform
   decaying_strategy: 
     values:
-      - 0
-      - 1
-      - 2
-      - 3
+      - "0"
+      - "1"
+      - "2"
+      - "3"
   embedding_method: 
     values:
       - "class"
