@@ -4,4 +4,4 @@
 #SBATCH --mem 32G
 #SBATCH --gres=gpu:1
 #SBATCH --time 8:00:00 
-python -m src.models.train_model --mode sweep --wandb_id g5w3bxrm
+python -m src.models.train_model --mode sweep --wandb_id 0ad80p9w

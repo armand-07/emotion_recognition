@@ -11,13 +11,11 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torcheval.metrics import MulticlassAccuracy
 from torch.nn import functional as F
-
+import math
 
 from codecarbon import EmissionsTracker
 import wandb
 from wandb.sdk import wandb_run
-
-import math
 
 from src import MODELS_DIR
 from src.data.dataset import create_dataloader
@@ -311,7 +309,7 @@ def model_training(params = None):
     This function is able to perform a standard training (using params.yaml config), an extensive training from a wandb training 
     (taking its parameters and restart training), or a sweep training as a wandb agent.
     Parameters:
-        - params: Dictionary with the parameters of the training. If none is provided, this config will be set by Sweep Controller 
+        - params: Dictionary with the parameters of the training. If None is provided, this config will be set by Sweep Controller 
                 by wandb.agent
     Returns:
         - None
@@ -393,7 +391,8 @@ def model_training(params = None):
         distillation = True
         model_teacher, _ = arch.model_creation(params['teacher_arch'], weights = 'affectnet_cat_emot', device = device)
         model_teacher.eval()
-        criterion_distill = arch.define_criterion(params, 0.0, 'train', distillation = True, device = device)
+        # Distillation loss has no label smoothing nor weighting
+        criterion_distill = arch.define_criterion(params, 0.0, 'train', distillation = True, device = device)  
         alpha = params['alpha']
     else:
         distillation = False
@@ -495,7 +494,7 @@ def main(mode, wandb_id):
         
     elif mode == 'sweep':
         # Path of the parameters file
-        config_sweep_path = Path("config_deit_tiny_posterV2_hyperparameter_tunning_weighted_loss.yaml")
+        config_sweep_path = Path("config_deit_tiny_efficientnet_hyperparameter_tunning_weighted_loss.yaml")
         # Read data preparation parameters
         with open(config_sweep_path, "r", encoding='utf-8') as config_file:
             try:

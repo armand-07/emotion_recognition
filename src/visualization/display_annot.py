@@ -3,11 +3,49 @@ from prettytable import PrettyTable
 
 import cv2
 import numpy as np
+import torch
 from random import randint
 from PIL import Image
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
-from src import INTERIM_DATA_DIR
+
+from src import INTERIM_DATA_DIR, AFFECTNET_CAT_EMOT
+import src.models.architectures as arch
+
+
+
+def plot_mean_emotion_distribution(img, output_preds):
+    height, width, _ = img.shape
+    max_length = max(height, width)
+    dpi = 100 # Dots per inch, standard is 100
+    width_in = (max_length/4)/ dpi
+    height_in = (max_length/3) / dpi
+
+    # Get the emotion distribution for each detection
+    output_distrib = arch.get_distributions(output_preds)
+    # Get mean emotion distribution
+    mean_distrib = torch.mean(output_distrib, dim = 0)
+    mean_distrib = mean_distrib.cpu().numpy()
+    # Plot the mean emotion distribution
+    fig, ax = plt.subplots(figsize=(width_in, height_in), dpi=dpi)
+    ax.bar(AFFECTNET_CAT_EMOT, mean_distrib, color = 'blue')
+    ax.set_ylabel('Probability')
+    ax.set_ylim([0.0, 1.0])
+    ax.set_xlabel('Emotion categories')
+    ax.set_title('Mean emotion distribution for current detections')
+    # Convert to numpy array
+    canvas = FigureCanvas(fig)
+    canvas.draw()
+    plt.close(fig)
+    img_distrib = np.frombuffer(canvas.tostring_rgb(), dtype='uint8').reshape(canvas.get_width_height()[::-1] + (3,))
+    img_distrib = cv2.cvtColor(img_distrib, cv2.COLOR_RGB2BGR)
+    # Asegúrate de que ambas imágenes tengan el mismo tamaño
+    height_distrib, width_distrib, _ = img_distrib.shape 
+    padding = 20 # Padding in pixels
+    img[height-padding-height_distrib : height-padding, width-padding-width_distrib: width-padding] = img_distrib
+    return img
+
 
 
 def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array = None, bbox_format:str ="xywh", 

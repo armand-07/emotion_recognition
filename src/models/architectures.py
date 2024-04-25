@@ -106,6 +106,22 @@ def define_optimizer(model:torch.nn.Module, optimizer_name:str, lr:float, moment
 
 
 
+def get_pred_distilled_model(model:torch.nn.Module, imgs:torch.Tensor, output_method:str) -> torch.Tensor:
+    """Get the predictions of the distilled model. The function returns the 
+    predictions of the distilled model based on the output output method chosen. 
+    It can be chosen between 'class', 'distill' or 'both' (sum between 'distill' and 'class' logits)."""
+    pred, pred_dist = model(imgs)
+    if output_method == "class":
+        return pred
+    elif output_method == "distill":
+        return pred_dist
+    elif output_method == "both":
+        return pred + pred_dist
+    else:
+        raise ValueError(f"Invalid embedding method: {output_method}")
+
+
+
 def get_distributions(output:torch.Tensor) -> torch.Tensor:
     """Get the distributions from the output of the model. The input is the output of the model in logits.
         Params:
@@ -236,7 +252,7 @@ def efficientnet_b0(device:torch.device, pretrained:bool = True, weights:str = "
 
     elif weights.lower()  == "affectnet_cat_emot":
         weights_path = os.path.join(MODELS_DIR, "EfficientNetB0", "enet_b0_8_best_vgaf.pt")
-        print("Weights obtained from: https://github.com/av-savchenko/face-emotion-recognition/blob/main/models/affectnet_emotions/enet_b0_8_va_mtl.pt")
+        print("Weights obtained from: https://github.com/av-savchenko/face-emotion-recognition/blob/main/models/affectnet_emotions/enet_b0_8_best_vgaf.pt")
         model = torch.load(weights_path)
 
         # To match the standard AffectNet order targets it is needed to rearrange the output of the model, as it is sorted alphabetically

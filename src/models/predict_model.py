@@ -16,7 +16,7 @@ import ultralytics
 from src import INFERENCE_DIR, NUMBER_OF_EMOT
 import src.models.architectures as arch
 from src.data.dataset import data_transforms
-from src.visualization.display_annot import plot_bbox_emot
+from src.visualization.display_annot import plot_bbox_emot, plot_mean_emotion_distribution
 from src.models.load_pretrained_face_models import load_YOLO_model_face_recognition
 from src.models.inference_face_detection_model import detect_faces_YOLO, track_faces_YOLO, transform_bbox_to_square
 
@@ -49,9 +49,9 @@ def create_faces_batch(img:np.array, face_transforms:albumentations.Compose,
 
 
 
-def infer_image(img:np.array, face_model:ultralytics.YOLO, emotion_model:torch.nn.Module, device: torch.device, 
-                face_transforms:albumentations.Compose, face_threshold:float = 0.65, 
-                tracking:bool = False) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def infer_image(img:np.array, face_model:ultralytics.YOLO, emotion_model:torch.nn.Module, distilled_model:bool,
+                distilled_embedding_method:str, device: torch.device, face_transforms:albumentations.Compose, 
+                face_threshold:float = 0.65, tracking:bool = False) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Function to infer an image using the given emotion model, face detector and hyperparameters. It returns 
     the faces detected with the bbox represented in x,y top-left corner format, the predictions of the model (logits) 
     and the ids of the faces.
@@ -59,6 +59,9 @@ def infer_image(img:np.array, face_model:ultralytics.YOLO, emotion_model:torch.n
         - img (np.array): The image to be inferred.
         - face_model (YOLO): The face detector model.
         - emotion_model (torch.nn.Module): The emotion model.
+        - distilled_model (bool): If True, it is a distilled model. 
+        - distilled_embedding_method (str): The method to obtain the output embeddings for distilled models. 
+        It can be 'class', 'distill' or 'both'.
         - device (torch.device): The device to be used.
         - face_transforms (albumentations.Compose): The face transforms.
         - face_threshold (float): The threshold to be used for the face detector.
@@ -83,7 +86,10 @@ def infer_image(img:np.array, face_model:ultralytics.YOLO, emotion_model:torch.n
         face_batch = create_faces_batch(img, face_transforms, filtered_faces, device)
         with torch.no_grad():
             face_batch.to(device)
-            preds = emotion_model(face_batch) # Predict emotions returns a tensor with logits
+            if distilled_model:
+                preds = arch.get_pred_distilled_model(emotion_model, face_batch, distilled_embedding_method)
+            else:
+                preds = emotion_model(face_batch) # Predict emotions returns a tensor with logits
     else: # If no faces are detected, return empty tensors
         preds = torch.empty(0).to(device)
     
@@ -108,7 +114,8 @@ def postprocessing_inference(people_detected:dict, preds:torch.Tensor, bbox_ids:
         - torch.Tensor: The updated labels list. It has shape [D, NUMBER_OF_EMOT], where D are the detections. They are logits.  
     """
     output_preds = torch.zeros((len(preds), NUMBER_OF_EMOT))
-    for i in range(len(preds)):
+    detections = len(preds)
+    for i in range(detections):
         id = bbox_ids[i].item()
         if id != -1:
             if id in people_detected:
@@ -173,6 +180,8 @@ def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_mode
                     output_preds = preds
                 labels = arch.get_predictions(output_preds)
                 frame = plot_bbox_emot(frame, faces_bbox, labels, ids, bbox_format ="xywh", display = False)
+                
+                
                 cv2.imshow('Frame', frame)
             
             if cv2.waitKey(25) & 0xFF == ord('q'): # Press Q on keyboard to exit
@@ -182,9 +191,9 @@ def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_mode
 
 
 
-def infer_video_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, name:str, face_model, 
-                     emotion_model: torch.nn.Module, device: torch.device, face_transforms: albumentations.Compose, 
-                     params:dict) -> None:
+def infer_video_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, name:str, face_model: ultralytics.YOLO, 
+                        emotion_model: torch.nn.Module, device: torch.device, face_transforms: albumentations.Compose,
+                        params:dict) -> None:
     """Function to make inference in a video and save the result in capturer.
     Args:
         - cap (cv2.VideoCapture): The video capture object.
@@ -207,8 +216,8 @@ def infer_video_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, name:st
         # Capture frame-by-frame
         ret, frame = cap.read() # ret is a boolean that returns True if the frame is available. frame is the image array.
         if ret == True:
-            faces_bbox, preds, ids = infer_image(frame, face_model, emotion_model, device, face_transforms, 
-                                                 params['face_threshold'], params['tracking'])
+            faces_bbox, preds, ids = infer_image(frame, face_model, emotion_model, params['distilled_model'], params['distilled_model_out_method'], 
+                                                 device, face_transforms, params['face_threshold'], params['tracking'])
             if params['tracking']:
                 people_detected, output_preds = postprocessing_inference(people_detected, preds, ids, 
                                                                          params['postprocessing'], params['window_size'])
@@ -218,6 +227,9 @@ def infer_video_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, name:st
                 output_preds = preds
             labels = arch.get_predictions(output_preds)
             frame = plot_bbox_emot(frame, faces_bbox, labels, ids, bbox_format ="xywh", display = False)
+            # Display the mean sentiment of the people in the frame
+            if params['show_mean_emotion_distrib']:
+                frame = plot_mean_emotion_distribution(frame, output_preds)
             # Write the frame into the output file
             output_cap.write(frame)
         else: # Break the loop if video has ended
@@ -243,6 +255,7 @@ def load_models(wandb_id:str, face_detector_size:str = "medium") -> Tuple[
     artifact_dir = arch.get_wandb_artifact(wandb_id, api = api)
     local_artifact = torch.load(os.path.join(artifact_dir, "model_best.pt"))
     params = local_artifact["params"]
+    distilled_model = params['distillation']
     emotion_model, device = arch.model_creation(params['arch'], local_artifact['state_dict'])
     emotion_model.eval()
     # Load the face transforms
@@ -250,7 +263,7 @@ def load_models(wandb_id:str, face_detector_size:str = "medium") -> Tuple[
     
     # Lastly load face detector
     face_model = load_YOLO_model_face_recognition(size = face_detector_size, device = device)
-    return face_model, emotion_model, face_transforms, device
+    return face_model, emotion_model, distilled_model, face_transforms, device
 
 
 
@@ -263,6 +276,7 @@ def process_file(input_path:str, output_dir:str, face_model, emotion_model, devi
         - emotion_model (torch.nn.Module): The emotion model.
         - device (torch.device): The device to be used.
         - face_transforms (albumentations.Compose): The face transforms.
+        - params (dict): The parameters to be used for the inference.
     Returns:
         - None 
     """
@@ -272,8 +286,8 @@ def process_file(input_path:str, output_dir:str, face_model, emotion_model, devi
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         # Make inference
         start = time.time()
-        faces_bbox, output_preds, ids = infer_image(img, face_model, emotion_model, device, face_transforms, 
-                                                 params['face_threshold'], params['tracking'], first_frame=True)
+        faces_bbox, output_preds, ids = infer_image(img, face_model, emotion_model, params['distilled_model'], params['distilled_model_out_method'], 
+                                                    device, face_transforms, params['face_threshold'], params['tracking'], first_frame=True)
         labels = arch.get_predictions(output_preds)
         frame = plot_bbox_emot(frame, faces_bbox, labels, ids, bbox_format ="xywh", display = False)
         end = time.time()
@@ -343,7 +357,8 @@ def main(mode: str, input_path: str, output_dir:str) -> None:
             print(exc)
     params['job_type'] = "test"
 
-    face_model, emotion_model, face_transforms, device = load_models(params['wandb_id_emotion_model'],params['face_detector_size'])
+    face_model, emotion_model, distilled_model, face_transforms, device = load_models(params['wandb_id_emotion_model'], params['face_detector_size'])
+    params['distilled_model'] = distilled_model
     # Start with inference
     if mode == 'stream':
         cap = cv2.VideoCapture(0)
