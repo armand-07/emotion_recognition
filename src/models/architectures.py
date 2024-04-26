@@ -438,7 +438,7 @@ def model_creation(arch_type:str, weights:Union[str, dict] = "none", device:torc
     arch_type = arch_type.lower()
 
     print(f"Creating model with architecture: {arch_type}")
-    print(f"Using pre-trained weights: {pretrained}")
+    print(f"Using imagenet pre-trained weights: {pretrained}")
     print(f"Using custom weights of type {type(weights)}: {weights if isinstance(weights, str) else ''}")
     
     if arch_type.startswith("resnet"): # ResNet architectures

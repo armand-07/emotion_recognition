@@ -3,7 +3,7 @@ import os
 import time
 import wandb
 from tqdm import tqdm
-from typing import Union, Tuple
+from typing import Tuple
 from pathlib import Path
 import yaml
 
@@ -12,11 +12,12 @@ import torch
 import numpy as np
 import albumentations
 import ultralytics
+import matplotlib.pyplot as plt
 
 from src import INFERENCE_DIR, NUMBER_OF_EMOT
 import src.models.architectures as arch
 from src.data.dataset import data_transforms
-from src.visualization.display_annot import plot_bbox_emot, plot_mean_emotion_distribution
+from src.visualization.display_annot import plot_bbox_emot, plot_mean_emotion_distribution, create_figure_mean_emotion_distribution
 from src.models.load_pretrained_face_models import load_YOLO_model_face_recognition
 from src.models.inference_face_detection_model import detect_faces_YOLO, track_faces_YOLO, transform_bbox_to_square
 
@@ -141,7 +142,7 @@ def postprocessing_inference(people_detected:dict, preds:torch.Tensor, bbox_ids:
 def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_model: torch.nn.Module, device: torch.device, 
                 face_transforms:albumentations.Compose, params:dict) -> None:
     """Function to make inference in a video stream. It shows the results in a window.
-   Args:
+    Args:
         - cap (cv2.VideoCapture): The video capture object.
         - face_model (ultralytics.YOLO): The face detector model.
         - emotion_model (torch.nn.Module): The emotion model.
@@ -151,39 +152,38 @@ def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_mode
     Returns:
         - None
     """
-    # Read until video is completed
+    # Get the video properties
+    fps_camera = cap.get(cv2.CAP_PROP_FPS)  
+    print(f"Camera FPS: {fps_camera}")
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    print(f"Camera resolution: {width}x{height}")
+    # Set variables if parameters are activated
     if params['tracking']:
         people_detected = dict()
-    first_frame = True
+        people_detected[-1] = [torch.ones(NUMBER_OF_EMOT).to(device)] # If no tracking id, it returns a uniform distribution
+    if params['show_mean_emotion_distrib']:
+        fig, ax, distribution_container = create_figure_mean_emotion_distribution(height, width)
 
-    frame_counter = 0
-    fps_camera = cap.get(cv2.CAP_PROP_FPS)  
-    fps_target = 10
-    frame_skip = fps_camera // fps_target
-
+    # Read until video is completed
     while (cap.isOpened()):
         ret, frame = cap.read()
         if ret == True:
-            frame_counter += 1
-            if frame_counter % frame_skip == 0: # Infer only if needed
-                faces_bbox, preds, ids = infer_image(frame, face_model, emotion_model, device, face_transforms, 
-                                                    params['face_threshold'], params['tracking'], first_frame)
-                first_frame = False
-                ids = ids.cpu().numpy()
-                faces_bbox = faces_bbox.cpu().numpy()
-                if params['tracking']:
-                    people_detected, output_preds = postprocessing_inference(people_detected, preds, ids, 
+            faces_bbox, preds, ids = infer_image(frame, face_model, emotion_model, params['distilled_model'], params['distilled_model_out_method'], 
+                                                 device, face_transforms, params['face_threshold'], params['tracking'])
+            if params['tracking']:
+                people_detected, output_preds = postprocessing_inference(people_detected, preds, ids, 
                                                                             params['postprocessing'], params['window_size'])
-                else: 
-                    if params['postprocessing'] != 'standard':
-                        raise ValueError(f"Invalid postprocessing mode given: {params['postprocessing']}")
-                    output_preds = preds
-                labels = arch.get_predictions(output_preds)
-                frame = plot_bbox_emot(frame, faces_bbox, labels, ids, bbox_format ="xywh", display = False)
-                
-                
-                cv2.imshow('Frame', frame)
-            
+            else: 
+                if params['postprocessing'] != 'standard': # If tracking is disabled, only standard postprocessing is allowed
+                    raise ValueError(f"Invalid postprocessing mode given: {params['postprocessing']}")
+                output_preds = preds
+            labels = arch.get_predictions(output_preds)
+            frame = plot_bbox_emot(frame, faces_bbox, labels, ids, bbox_format ="xywh", display = False)
+            # Display the mean sentiment of the people in the frame
+            if params['show_mean_emotion_distrib']:
+                frame, fig, ax, distribution_container = plot_mean_emotion_distribution(frame, output_preds, fig, ax, distribution_container)
+            cv2.imshow('Frame', frame)
             if cv2.waitKey(25) & 0xFF == ord('q'): # Press Q on keyboard to exit
                 break
         else:
@@ -207,11 +207,20 @@ def infer_video_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, name:st
     Returns:
         - None
     """
-    # Read until video is completed
+    # Get the video properties
+    fps_camera = cap.get(cv2.CAP_PROP_FPS)  
+    print(f"Camera FPS: {fps_camera}")
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    print(f"Camera resolution: {width}x{height}")
+    # Set variables if parameters are activated
     if params['tracking']:
         people_detected = dict()
         people_detected[-1] = [torch.ones(NUMBER_OF_EMOT).to(device)] # If no tracking id, it returns a uniform distribution
-    
+    if params['show_mean_emotion_distrib']:
+        fig, ax, distribution_container = create_figure_mean_emotion_distribution(height, width)
+
+    # Read until video is completed
     for frame_id in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc = f'Analizing video "{name}"'):
         # Capture frame-by-frame
         ret, frame = cap.read() # ret is a boolean that returns True if the frame is available. frame is the image array.
@@ -229,7 +238,7 @@ def infer_video_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, name:st
             frame = plot_bbox_emot(frame, faces_bbox, labels, ids, bbox_format ="xywh", display = False)
             # Display the mean sentiment of the people in the frame
             if params['show_mean_emotion_distrib']:
-                frame = plot_mean_emotion_distribution(frame, output_preds)
+                frame, fig, ax, distribution_container = plot_mean_emotion_distribution(frame, output_preds, fig, ax, distribution_container)
             # Write the frame into the output file
             output_cap.write(frame)
         else: # Break the loop if video has ended
@@ -260,7 +269,7 @@ def load_models(wandb_id:str, face_detector_size:str = "medium") -> Tuple[
     emotion_model.eval()
     # Load the face transforms
     face_transforms = data_transforms(only_normalize = True, image_norm = params['image_norm'], resize = True)
-    
+
     # Lastly load face detector
     face_model = load_YOLO_model_face_recognition(size = face_detector_size, device = device)
     return face_model, emotion_model, distilled_model, face_transforms, device
@@ -284,12 +293,17 @@ def process_file(input_path:str, output_dir:str, face_model, emotion_model, devi
         # Read image
         img = cv2.imread(input_path)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        if params['show_mean_emotion_distrib']:
+            img_height, img_width, _ = img.shape
+            fig, ax, distribution_container = create_figure_mean_emotion_distribution(img_height, img_width)
         # Make inference
         start = time.time()
         faces_bbox, output_preds, ids = infer_image(img, face_model, emotion_model, params['distilled_model'], params['distilled_model_out_method'], 
                                                     device, face_transforms, params['face_threshold'], params['tracking'], first_frame=True)
         labels = arch.get_predictions(output_preds)
         frame = plot_bbox_emot(frame, faces_bbox, labels, ids, bbox_format ="xywh", display = False)
+        if params['show_mean_emotion_distrib']:
+            frame, fig, ax, distribution_container = plot_mean_emotion_distribution(frame, output_preds, fig, ax, distribution_container)
         end = time.time()
         # Define the output path
         name = os.path.basename(input_path).split('.')[0]
@@ -362,6 +376,7 @@ def main(mode: str, input_path: str, output_dir:str) -> None:
     # Start with inference
     if mode == 'stream':
         cap = cv2.VideoCapture(0)
+        infer_stream(cap, face_model, emotion_model, device, face_transforms, params)
 
     elif mode == 'save':
         input_path = os.path.join(INFERENCE_DIR, input_path)
