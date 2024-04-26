@@ -24,7 +24,7 @@ from config import wandbAPIkey
 def main(wandb_id):   
     wandb.login(key=wandbAPIkey)
     run = wandb.init(
-    entity='armand-07',
+    entity="armand-07",
     project="TFG Facial Emotion Recognition",
     job_type="test",
     )
@@ -66,16 +66,16 @@ def main(wandb_id):
     
     if "distillation" in params and params["distillation"]: # If distillation is enabled test three embedding methods
         metrics = validate_distillation(dataloader_test, model, criterion, embedding_method = "class",
-                        device = device, epoch = 0, batch_size = batch_size, run = run)
+                        device = device, epoch = 0, batch_size = batch_size, run = run, test = True)
         print(metrics)
         metrics = validate_distillation(dataloader_test, model, criterion, embedding_method = "distill",
-                        device = device, epoch = 1, batch_size = batch_size, run = run)
+                        device = device, epoch = 1, batch_size = batch_size, run = run, test = True)
         print(metrics)
         metrics = validate_distillation(dataloader_test, model, criterion, embedding_method = "both",
-                        device = device, epoch = 2, batch_size = batch_size, run = run)
+                        device = device, epoch = 2, batch_size = batch_size, run = run, test = True)
         print(metrics)
     else: 
-        metrics = validate(dataloader_test, model, criterion, device, 0, batch_size, run)
+        metrics = validate(dataloader_test, model, criterion, device, 0, batch_size, run, test = True)
         print(metrics)
 
     wandb.finish()

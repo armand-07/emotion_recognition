@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --nodelist=gpic11
+#SBATCH --nodelist=gpic12
 #SBATCH -c 4
 #SBATCH --mem 32G
 #SBATCH --gres=gpu:1

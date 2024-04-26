@@ -156,7 +156,7 @@ def train_distillation(train_loader: DataLoader, model_student: torch.nn.Module,
 
 
 def validate(val_loader: DataLoader, model: torch.nn.Module, criterion: torch.nn, device: torch.device,
-             epoch: int, batch_size: int, run: wandb_run.Run) -> dict:
+             epoch: int, batch_size: int, run: wandb_run.Run, test:bool = False) -> dict:
     """
     Function to validate the model for one epoch. It computes many metrics and logs them to Weights and Biases and returns them.
     Parameters:
@@ -167,6 +167,7 @@ def validate(val_loader: DataLoader, model: torch.nn.Module, criterion: torch.nn
         - epoch: Current epoch number
         - batch_size: The size of the batches
         - run: Weights and Biases run object
+        - test: Flag to indicate if the validation is for test to add extra metrics
         Returns:
         - metrics: Dictionary with the metrics computed during the validation
     """
@@ -214,7 +215,7 @@ def validate(val_loader: DataLoader, model: torch.nn.Module, criterion: torch.nn
 
 
 def validate_distillation(val_loader: DataLoader, model: torch.nn.Module, criterion: torch.nn, embedding_method: str,
-                        device: torch.device, epoch: int, batch_size: int, run: wandb_run.Run) -> dict:
+                        device: torch.device, epoch: int, batch_size: int, run: wandb_run.Run, test:bool = False) -> dict:
     """
     Function to validate the model for one epoch using distillation. It computes many metrics and logs them to Weights 
     and Biases and returns them.
@@ -227,6 +228,7 @@ def validate_distillation(val_loader: DataLoader, model: torch.nn.Module, criter
         - epoch: Current epoch number
         - batch_size: The size of the batches
         - run: Weights and Biases run object
+        - test: Flag to indicate if the validation is for test to add extra metrics
         Returns:
         - metrics: Dictionary with the metrics computed during the validation
     """
@@ -279,7 +281,7 @@ def validate_distillation(val_loader: DataLoader, model: torch.nn.Module, criter
         
         # Compute metrics
         metrics = save_val_wandb_metrics_dist(acc1, acc2, val_loader, batch_size, all_targets, all_preds_dist, 
-                           all_preds_labels, global_epoch_loss, epoch, global_cosine_sim, run)
+                           all_preds_labels, global_epoch_loss, epoch, global_cosine_sim, run, test)
     return metrics
 
 
