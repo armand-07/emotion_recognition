@@ -3,7 +3,7 @@ import pandas as pd
 import torch
 from torcheval.metrics.functional import multiclass_f1_score
 import numpy as np
-from sklearn.metrics import roc_auc_score, confusion_matrix, cohen_kappa_score, classification_report
+from sklearn.metrics import roc_auc_score, confusion_matrix, cohen_kappa_score, classification_report, f1_score
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -130,7 +130,7 @@ def compute_multiclass_precision_recall(all_targets, all_preds_labels):
     """Compute the precision and recall for the model using the One-Versus-Rest strategy and then returns the resulting 
     plot and area under the curve for each class.
     """
-    report = classification_report(all_targets, all_preds_labels, output_dict=True)
+    report = classification_report(all_targets, all_preds_labels, output_dict=True, target_names=AFFECTNET_CAT_EMOT)
 
     classes = list(report.keys())[:-3]  # Exclude 'accuracy', 'macro avg', 'weighted avg'
     precision = [report[cls]['precision'] for cls in classes]
@@ -139,19 +139,45 @@ def compute_multiclass_precision_recall(all_targets, all_preds_labels):
     x = np.arange(len(classes))  # the label locations
     width = 0.35  # the width of the bars
 
-    chart_precision_recall, ax = plt.subplots()
-    rects1 = ax.bar(x - width/2, precision, width, label='Precision')
-    rects2 = ax.bar(x + width/2, recall, width, label='Recall')
+    fig, ax = plt.subplots()
+    ax.bar(x - width/2, precision, width, label='Precision', color='sandybrown')
+    ax.bar(x + width/2, recall, width, label='Recall', color='cornflowerblue')
 
     # Add some text for labels, title and custom x-axis tick labels, etc.
     ax.set_ylabel('Scores')
-    ax.set_title('Precision and Recall by class')
+    ax.set_ylim([0.0, 1.0])
+    ax.grid(axis = 'y', linestyle = '--', linewidth = 0.5, color = 'black')
+    ax.set_title('Precision and Recall by emotion class')
+    ax.set_xlabel('Emotion classes')
     ax.set_xticks(x)
-    ax.set_xticklabels(AFFECTNET_CAT_EMOT)
+    ax.set_xticklabels(classes)
     ax.legend()
 
-    chart_precision_recall.tight_layout()
-    return chart_precision_recall
+    fig.tight_layout()
+    return fig
+
+
+def compute_multiclass_f1_score(all_targets, all_preds_labels):
+    """Compute the F1 score for each class in a multiclass classification problem."""
+    f1_scores = f1_score(all_targets, all_preds_labels, average=None)
+    x = np.arange(len(AFFECTNET_CAT_EMOT))  # the label locations
+    width = 0.35  # the width of the bars
+
+    fig, ax = plt.subplots()
+    ax.bar(x, f1_scores, width, color='mediumseagreen')
+
+    # Add some text for labels, title and custom x-axis tick labels, etc.
+    ax.set_ylabel('F1 Score')
+    ax.set_ylim([0.0, 1.0])
+    ax.grid(axis = 'y', linestyle = '--', linewidth = 0.5, color = 'black')
+    ax.set_title('F1 Score by class')
+    ax.set_xticks(x)
+    ax.set_xticklabels(AFFECTNET_CAT_EMOT)
+
+    fig.tight_layout()
+    return fig
+
+
 
 
 
@@ -174,6 +200,7 @@ def save_val_wandb_metrics(acc1, acc2, val_loader, batch_size, all_targets, all_
     if extra_metrics:
         # Compute the precision and recall for the model per each class
         chart_precision_recall = compute_multiclass_precision_recall(all_targets, all_preds_labels)
+        chart_f1_score = compute_multiclass_f1_score(all_targets, all_preds_labels)
         # Log the metrics
         run.log({"Val accuracy per epoch": acc1,
                 "Val top-2 accuracy per epoch": acc2,
@@ -183,7 +210,8 @@ def save_val_wandb_metrics(acc1, acc2, val_loader, batch_size, all_targets, all_
                 "Plot ROC AUC score with OvR strategy":  wandb.Image(chart_ROC_AUC),
                 "Area Under the (ROC AUC) Curve per label": roc_auc_per_label,
                 "Area Under the (ROC AUC) Curve OvR": roc_auc_ovr,
-                "Plot Precision and Recall by class": wandb.Image(plt),
+                "Plot Precision and Recall by class": wandb.Image(chart_precision_recall),
+                "Plot F1-Score by class": wandb.Image(chart_f1_score),
                 "Confusion Matrix": chart_conf_matrix
                 }, step=epoch+1, commit=True)
         metrics = {
@@ -239,6 +267,7 @@ def save_val_wandb_metrics_dist(acc1, acc2, val_loader, batch_size, all_targets,
     if extra_metrics:
         # Compute the precision and recall for the model per each class
         chart_precision_recall = compute_multiclass_precision_recall(all_targets, all_preds_labels)
+        chart_f1_score = compute_multiclass_f1_score(all_targets, all_preds_labels)
         # Log the metrics
         run.log({"Val accuracy per epoch": acc1,
                 "Val top-2 accuracy per epoch": acc2,
@@ -248,7 +277,8 @@ def save_val_wandb_metrics_dist(acc1, acc2, val_loader, batch_size, all_targets,
                 "Plot ROC AUC score with OvR strategy":  wandb.Image(chart_ROC_AUC),
                 "Area Under the (ROC AUC) Curve per label": roc_auc_per_label,
                 "Area Under the (ROC AUC) Curve OvR": roc_auc_ovr,
-                "Plot Precision and Recall by class": wandb.Image(plt),
+                "Plot Precision and Recall by class": wandb.Image(chart_precision_recall),
+                "Plot F1-Score by class": wandb.Image(chart_f1_score),
                 "Confusion Matrix": chart_conf_matrix
                 }, step=epoch+1, commit=True)
         metrics = {
@@ -258,8 +288,6 @@ def save_val_wandb_metrics_dist(acc1, acc2, val_loader, batch_size, all_targets,
             "F1-Score": f1_score,
             "Cohen Kappa coefficient": cohen_kappa,
             "Area Under the (ROC AUC) Curve OvR": roc_auc_ovr}
-
-
     else:
         # Log the metrics
         run.log({"Val accuracy per epoch": acc1,
