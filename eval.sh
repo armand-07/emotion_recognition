@@ -4,4 +4,4 @@
 #SBATCH --mem 32G
 #SBATCH --gres=gpu:1
 #SBATCH --time 0:15:00 
-python -m src.models.eval_model --wandb_id copper-sweep-3
+python -m src.models.eval_model --wandb_id visionary-sweep-9
