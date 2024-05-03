@@ -104,6 +104,9 @@ def define_optimizer(model:torch.nn.Module, optimizer_name:str, lr:float, moment
     
     return optimizer
 
+def get_pred (model:torch.nn.Module, imgs:torch.Tensor) -> torch.Tensor:
+    print("Getting predictions")
+
 
 
 def get_pred_distilled_model(model:torch.nn.Module, imgs:torch.Tensor, output_method:str) -> torch.Tensor:

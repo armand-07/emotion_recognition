@@ -138,6 +138,10 @@ def postprocessing_inference(people_detected:dict, preds:torch.Tensor, bbox_ids:
     return people_detected, output_preds
 
 
+def get_pred_from_frame (): 
+    pass
+
+
 
 def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_model: torch.nn.Module, device: torch.device, 
                 face_transforms:albumentations.Compose, params:dict) -> None:
