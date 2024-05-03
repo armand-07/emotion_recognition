@@ -151,26 +151,32 @@ def process_file(input_path:str, output_dir:str, face_model: ultralytics.YOLO, e
         if params['show_mean_emotion_distrib']:
             img_height, img_width, _ = img.shape
             fig, ax, distribution_container = create_figure_mean_emotion_distribution(img_height, img_width)
+
         # Make inference
         start = time.time()
         faces_bbox, labels, ids, processed_preds, people_detected = arch_v.get_pred_from_frame(img, face_model, emotion_model, device, face_transforms, people_detected, params_image)
-        img = plot_bbox_emot(img, faces_bbox, labels, ids, bbox_format ="xywh", display = False)
-        if params['show_mean_emotion_distrib']:
-            img, fig, ax, distribution_container = plot_mean_emotion_distribution(img, processed_preds, fig, ax, distribution_container)
+        if params['save_result'] or params['show_inference']: # Show the visual results if needed
+            img = plot_bbox_emot(img, faces_bbox, labels, ids, bbox_format ="xywh", display = False)
+            if params['show_mean_emotion_distrib']:
+                img, fig, ax, distribution_container = plot_mean_emotion_distribution(img, processed_preds, fig, ax, 
+                                                                                      distribution_container, BGR_format=True)
         end = time.time()
+        print(f"The time needed to process the image: {end - start:.2f}s")
+
         # Display the results
         if params['show_inference']:
-                cv2.imshow('Image', img)
-        # Define the output path
-        name = os.path.basename(input_path).split('.')[0]
-        output_filename = os.path.join(output_dir, name+"_inference.jpg")
-        if os.path.exists(output_filename):
-            os.remove(output_filename)
-        # Save the image
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR) # Convert RGB to BGR to proper saving
-        cv2.imwrite(output_filename, img)
-        print("Saving in:", output_filename)
-        print(f"The time needed to process the image: {end - start:.2f}s")
+            cv2.imshow('Image', img)
+        if params['save_result']:
+            # Define the output path
+            name = os.path.basename(input_path).split('.')[0]
+            output_filename = os.path.join(output_dir, name+"_inference.jpg")
+            if os.path.exists(output_filename):
+                os.remove(output_filename)
+            # Save the image
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR) # Convert RGB to BGR to proper saving
+            cv2.imwrite(output_filename, img)
+            print("Saving in:", output_filename)
+
 
     elif input_path.endswith('.mp4') or input_path.endswith('.avi') or input_path.endswith('.mov'):
         cap = cv2.VideoCapture(input_path)

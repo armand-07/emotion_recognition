@@ -321,7 +321,7 @@ def get_raw_pred_from_frame(img:np.array, face_model:ultralytics.YOLO, emotion_m
         [faces_bbox, bbox_ids, confidence_YOLO] = track_faces_YOLO(img, face_model, device = device, format = 'xywh-center')
     else:
         [faces_bbox, confidence_YOLO] = detect_faces_YOLO(img, face_model, format = 'xywh-center')
-        bbox_ids = torch.Tensor(range(len(faces_bbox)))
+        bbox_ids = torch.arange(len(faces_bbox), dtype=torch.int)
 
     filtered_faces = faces_bbox[confidence_YOLO > face_threshold]
     filtered_ids = bbox_ids[confidence_YOLO > face_threshold]

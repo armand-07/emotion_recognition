@@ -38,7 +38,7 @@ def create_figure_mean_emotion_distribution(height:int, width:int) -> Tuple[plt.
 
 
 def plot_mean_emotion_distribution(img:np.array, output_preds: torch.Tensor, fig:plt.figure, 
-                                   ax:plt.axis, distribution_container:plt.bar = None)-> Tuple[np.array, plt.figure, plt.axis, plt.bar]:
+                                   ax:plt.axis, distribution_container:plt.bar = None, BGR_format:bool = False)-> Tuple[np.array, plt.figure, plt.axis, plt.bar]:
     """ Plots the mean emotion distribution on the image. The distribution_container is used to update the data of the plot.
     Params:
         - img (np.array): image as a numpy array
@@ -46,6 +46,7 @@ def plot_mean_emotion_distribution(img:np.array, output_preds: torch.Tensor, fig
         - fig (plt.figure): figure object
         - ax (plt.axis): axis object
         - distribution_container (plt.bar): container for the distribution plot
+        - BGR_format (bool): if True, the image is in BGR format
     Returns:
         - img (np.array): image with the mean emotion distribution plot
         - fig (plt.figure): updated figure object
@@ -63,7 +64,7 @@ def plot_mean_emotion_distribution(img:np.array, output_preds: torch.Tensor, fig
     max_length = max(height, width)
     # If bar_container is None, this is the first time plotting the mean emotion distribution
     if distribution_container is None:
-        distribution_container = ax.bar(AFFECTNET_CAT_EMOT, mean_distrib, color = 'blue')
+        distribution_container = ax.bar(AFFECTNET_CAT_EMOT, mean_distrib, color = 'cornflowerblue')
         ax.set_ylabel('Probability', fontsize=int(12*(max_length/1920)))
         ax.set_ylim([0.0, 1.0])
         ax.grid(axis = 'y', linestyle = '--', linewidth = 0.5, color = 'black')
@@ -81,7 +82,8 @@ def plot_mean_emotion_distribution(img:np.array, output_preds: torch.Tensor, fig
     canvas = FigureCanvas(fig)
     canvas.draw()
     img_distrib = np.frombuffer(canvas.tostring_rgb(), dtype='uint8').reshape(canvas.get_width_height()[::-1] + (3,))
-    img_distrib = cv2.cvtColor(img_distrib, cv2.COLOR_RGB2BGR)
+    if not BGR_format:
+        img_distrib = cv2.cvtColor(img_distrib, cv2.COLOR_RGB2BGR)
 
     # Put the distribution plot on the image
     height_distrib, width_distrib, _ = img_distrib.shape 
@@ -122,7 +124,7 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
         elif id == -1:
             text = 'Unknown' # Unknown detection as the bbox_id is -1
         else:
-            text = str(i)+":"+labels[i]
+            text = str(int(i))+":"+labels[i]
             
         # First set the thickness of the bbox
         bbox_thickness = int(round(max_img_size / 500))
