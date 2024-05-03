@@ -106,16 +106,18 @@ def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, nam
         if ret == True:
             faces_bbox, labels, ids, processed_preds, people_detected = arch_v.get_pred_from_frame(frame, face_model, emotion_model, device, 
                                                                                                 face_transforms, people_detected, params)
-            frame = plot_bbox_emot(frame, faces_bbox, labels, ids, bbox_format ="xywh", display = False)
-            # Display the mean sentiment of the people in the frame
-            if params['show_mean_emotion_distrib']:
-                frame, fig, ax, distribution_container = plot_mean_emotion_distribution(frame, processed_preds, fig, ax, distribution_container)
-            if params['show_inference']:
-                cv2.imshow(name, frame)
-                cv2.waitKey(1)      # Wait 1ms to be able to see properly the results
+            
+            if params['save_result'] or params['show_inference']: # Show the visual results if needed
+                frame = plot_bbox_emot(frame, faces_bbox, labels, ids, bbox_format ="xywh", display = False)
+                # Display the mean sentiment of the people in the frame
+                if params['show_mean_emotion_distrib']:
+                    frame, fig, ax, distribution_container = plot_mean_emotion_distribution(frame, processed_preds, fig, ax, distribution_container)
+                if params['show_inference']:
+                    cv2.imshow(name, frame)
+                    cv2.waitKey(1)      # Wait 1ms to be able to see properly the results
+                if params['save_result']: # Write the frame into the output file
+                    output_cap.write(frame)
 
-            # Write the frame into the output file
-            output_cap.write(frame)
         else: # Break the loop if video has ended
             break
 

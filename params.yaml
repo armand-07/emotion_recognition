@@ -43,12 +43,13 @@ eval:
 
 
 inference:
-  wandb_id_emotion_model: 'comic-sweep-22'
-  face_detector_size: 'medium' 
+  wandb_id_emotion_model: "comic-sweep-22"
+  face_detector_size: "nano"
   face_threshold: 0.65
   tracking: True
-  postprocessing: temporal_average
+  postprocessing: "temporal_average"
   window_size: 3
   distilled_model_out_method: "both" # only used in distilled models
   show_mean_emotion_distrib: True
-  show_inference: True
+  save_result: True
+  show_inference: False

@@ -361,7 +361,6 @@ def postprocessing_inference(people_detected:dict, preds:torch.Tensor, bbox_ids:
     """
     output_preds = torch.zeros((len(preds), NUMBER_OF_EMOT))
     detections = len(preds)
-    mode = mode.lower()
     for i in range(detections):
         id = bbox_ids[i].item()
         if id != -1:
@@ -409,7 +408,7 @@ def get_pred_from_frame(frame:np.array, face_model:ultralytics.YOLO, emotion_mod
         people_detected, processed_preds = postprocessing_inference(people_detected, raw_preds, ids, 
                                                                             params['postprocessing'], params['window_size'])
     else: 
-        if params['postprocessing'].lower() != 'standard': # If tracking is disabled, only standard postprocessing is allowed
+        if params['postprocessing'] != 'standard': # If tracking is disabled, only standard postprocessing is allowed
             raise ValueError(f"Invalid postprocessing mode given: {params['postprocessing']}")
         processed_preds = raw_preds
     labels = arch.get_predictions(processed_preds)
