@@ -50,4 +50,5 @@ inference:
   postprocessing: temporal_average
   window_size: 3
   distilled_model_out_method: "both" # only used in distilled models
-  show_mean_emotion_distrib: False
+  show_mean_emotion_distrib: True
+  show_inference: True

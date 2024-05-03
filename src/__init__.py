@@ -5,6 +5,7 @@ import os
 # Define path variables
 ROOT_DIR = Path(Path(__file__).resolve().parent.parent)
 MODELS_DIR = os.path.join(ROOT_DIR, "models")
+FACE_DETECT_DIR = os.path.join(MODELS_DIR, "face_recognition")
 RAW_DATA_DIR = os.path.join(ROOT_DIR, "data", "raw")
 INTERIM_DATA_DIR = os.path.join(ROOT_DIR, "data", "interim")
 INFERENCE_DIR = os.path.join(ROOT_DIR, "inference")
