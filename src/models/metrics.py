@@ -1,6 +1,9 @@
 import pandas as pd
+from typing import Tuple
 
 import torch
+from torch.utils.data import DataLoader
+import torcheval.metrics
 from torcheval.metrics.functional import multiclass_f1_score
 import numpy as np
 from sklearn.metrics import roc_auc_score, confusion_matrix, cohen_kappa_score, classification_report, f1_score
@@ -41,17 +44,14 @@ def calculate_tpr_fpr(binary_targets, binary_pred):
 
 
 
-def get_coordinates_roc(binary_targets, binary_prob):
-    '''
-    Computes the ROC Curve coordinates using 20 points between [0,1] to make faster the computation.
-    
-    Args:
-        binary_targets: The list with the real binary classes.
+def get_coordinates_roc(binary_targets: list, binary_prob :list) -> Tuple [list, list]:
+    ''' Computes the ROC Curve coordinates using 20 points between [0,1] to make faster the computation.
+    Params:
+        binary_targets (list): The list with the real binary classes.
         binary_prob: The list with the probabilities of a class.
-        
-    Returns:
-        tpr_list: The list of TPRs for the thresholds.
-        fpr_list: The list of FPRs for the thresholds.
+    Returns (list):
+        tpr_list (list): The list of TPRs for the thresholds.
+        fpr_list (list): The list of FPRs for the thresholds.
     '''
     tpr_list = [0]
     fpr_list = [0]
@@ -64,15 +64,16 @@ def get_coordinates_roc(binary_targets, binary_prob):
 
 
 
-def plot_roc_curve(tpr, fpr, scatter = True, ax = None):
-    '''
-    Plots the ROC Curve by using the list of coordinates (tpr and fpr).
-    
-    Args:
+def plot_roc_curve(tpr: list, fpr: list, scatter:bool = True, ax:plt.axes = None) -> None:
+    """Plots the ROC Curve by using the list of coordinates (tpr and fpr).
+    Params:
         tpr: The list of TPRs representing each coordinate.
         fpr: The list of FPRs representing each coordinate.
         scatter: When True, the points used on the calculation will be plotted with the line (default = True).
-    '''
+        ax: The axis where the plot will be drawn (default = None).
+    Returns:
+        None
+    """
     if ax == None:
         plt.figure(figsize = (5, 5))
         ax = plt.axes()
@@ -87,9 +88,19 @@ def plot_roc_curve(tpr, fpr, scatter = True, ax = None):
 
 
 
-def compute_ROC_AUC_OVR(all_targets, all_preds_dist, labels):
-    """Compute the ROC AUC score for the model using the One-Versus-Rest strategy and then returns the resulting 
-    plot and area under the curve for each class.
+def compute_ROC_AUC_OVR(all_targets:torch.Tensor, all_preds_dist:torch.Tensor, labels:list
+                        ) -> Tuple[plt.Figure, dict, float]:
+    """Compute the ROC AUC score for the model using the One-Versus-Rest strategy and 
+    then returns the resulting plot and area under the curve for each class. Only 20 
+    points are used to make the computation faster.
+    Params:
+        - all_targets(torch.Tensor): The tensor with all the targets.
+        - all_preds_dist(torch.Tensor): The tensor with all the predictions in distribution form.
+        - labels(list): The list with the labels of the classes.
+    Returns:
+        - fig(plt.Figure): The figure with the plots of the probability distribution and the ROC Curves.
+        - roc_auc_per_label(dict): The dictionary with the ROC AUC score for each class.
+        - roc_auc_ovr(float): The ROC AUC score with the One-Versus-Rest strategy.
     """
     fig = plt.figure(figsize = (24, 8))
     bins = [i/20 for i in range(20)] + [1]
@@ -126,9 +137,13 @@ def compute_ROC_AUC_OVR(all_targets, all_preds_dist, labels):
 
 
 
-def compute_multiclass_precision_recall(all_targets, all_preds_labels):
-    """Compute the precision and recall for the model using the One-Versus-Rest strategy and then returns the resulting 
-    plot and area under the curve for each class.
+def compute_multiclass_precision_recall(all_targets:torch.Tensor, all_preds_labels:torch.Tensor) -> plt.Figure:
+    """Compute the precision and recall for the model per class and then returns the resulting plot.
+    Params:
+        - all_targets (torch.Tensor): The tensor with all the targets.
+        - all_preds_labels (torch.Tensor): The tensor with all the predictions in label form.
+    Returns:
+        - fig (plt.Figure): The figure with the plots of the precision and recall for each class.
     """
     report = classification_report(all_targets, all_preds_labels, output_dict=True, target_names=AFFECTNET_CAT_EMOT)
 
@@ -157,8 +172,15 @@ def compute_multiclass_precision_recall(all_targets, all_preds_labels):
     return fig
 
 
-def compute_multiclass_f1_score(all_targets, all_preds_labels):
-    """Compute the F1 score for each class in a multiclass classification problem."""
+
+def compute_multiclass_f1_score(all_targets:torch.Tensor, all_preds_labels:torch.Tensor) -> plt.Figure:
+    """Compute the F1 score for each class in a multiclass classification problem. 
+    Params:
+        - all_targets (torch.Tensor): The tensor with all the targets.
+        - all_preds_labels (torch.Tensor): The tensor with all the predictions in label form.
+    Returns:
+        - fig (plt.Figure): The figure with the plot of the F1 score for each class.
+    """
     f1_scores = f1_score(all_targets, all_preds_labels, average=None)
     x = np.arange(len(AFFECTNET_CAT_EMOT))  # the label locations
     width = 0.35  # the width of the bars
@@ -179,10 +201,25 @@ def compute_multiclass_f1_score(all_targets, all_preds_labels):
 
 
 
-
-
-def save_val_wandb_metrics(acc1, acc2, val_loader, batch_size, all_targets, all_preds_distrib,
-                            all_preds_labels, global_epoch_loss, epoch, run, extra_metrics):
+def save_val_wandb_metrics(acc1:torcheval.metrics, acc2:torcheval.metrics, val_loader:DataLoader, batch_size:int, all_targets:torch.Tensor, 
+                           all_preds_distrib :torch.Tensor, all_preds_labels: torch.Tensor, global_epoch_loss:float, epoch:int, 
+                           run:wandb.run, extra_metrics:bool) -> dict:
+    """Save the validation metrics in Weights and Biases for the model.
+    Params:
+        - acc1 (torch.metrics): The accuracy metric for the model.
+        - acc2 (torch.metrics): The top-2 accuracy metric for the model.
+        - val_loader (DataLoader): The validation data loader.
+        - batch_size (int): The batch size used for the validation.
+        - all_targets (torch.Tensor): The tensor with all the targets.
+        - all_preds_distrib (torch.Tensor): The tensor with all the predictions in distribution form.
+        - all_preds_labels (torch.Tensor): The tensor with all the predictions in label form.
+        - global_epoch_loss (float): The global loss for the epoch.
+        - epoch (int): The epoch number.
+        - run (wandb.run): The Weights and Biases run object.
+        - extra_metrics (bool): When True, the precision and recall for each class will be computed and logged.
+    Returns:
+        - metrics (dict): The dictionary with the metrics to be saved locally when saving the model.
+    """
     # Compute the metrics
     acc1 = acc1.compute().item()
     acc2 = acc2.compute().item()
@@ -241,14 +278,32 @@ def save_val_wandb_metrics(acc1, acc2, val_loader, batch_size, all_targets, all_
             "F1-Score": f1_score,
             "Cohen Kappa coefficient": cohen_kappa,
             "Area Under the (ROC AUC) Curve OvR": roc_auc_ovr}
-    
+        
     return metrics
 
 
 
-def save_val_wandb_metrics_dist(acc1, acc2, val_loader, batch_size, all_targets, all_preds_dist, 
-                           all_preds_labels, global_epoch_loss, epoch, global_cosine_sim,
-                           run, extra_metrics):
+def save_val_wandb_metrics_dist(acc1:torcheval.metrics, acc2:torcheval.metrics, val_loader:DataLoader, batch_size:int, 
+                                all_targets:torch.Tensor, all_preds_distrib: torch.Tensor, all_preds_labels: torch.Tensor,
+                                global_epoch_loss: float, global_cosine_sim:torch.Tensor, epoch:int,
+                                run: wandb.run, extra_metrics:bool) -> dict:
+    """Save the validation metrics in Weights and Biases for the model when distillilation is applied.
+    Params:
+        - acc1 (torch.metrics): The accuracy metric for the model.
+        - acc2 (torch.metrics): The top-2 accuracy metric for the model.
+        - val_loader (DataLoader): The validation data loader.
+        - batch_size (int): The batch size used for the validation.
+        - all_targets (torch.Tensor): The tensor with all the targets.
+        - all_preds_distrib (torch.Tensor): The tensor with all the predictions in distribution form.
+        - all_preds_labels (torch.Tensor): The tensor with all the predictions in label form.
+        - global_epoch_loss (float): The global loss for the epoch.
+        - global_cosine_sim (torch.Tensor): The global cosine similarity for the epoch between the output embedding before the head of the class and distillation token.
+        - epoch (int): The epoch number.
+        - run (wandb.run): The Weights and Biases run object.
+        - extra_metrics (bool): When True, the precision and recall for each class will be computed and logged.
+    Returns:
+        - metrics (dict): The dictionary with the metrics to be saved locally when saving the model.
+    """
     # Compute the metrics
     acc1 = acc1.compute().item()
     acc2 = acc2.compute().item()
@@ -258,7 +313,7 @@ def save_val_wandb_metrics_dist(acc1, acc2, val_loader, batch_size, all_targets,
     global_cosine_sim = global_cosine_sim / (len(val_loader) * batch_size) # all batches have same size
 
     # ROC AUC score with OvR strategy
-    chart_ROC_AUC, roc_auc_per_label, roc_auc_ovr = compute_ROC_AUC_OVR(all_targets, all_preds_dist, AFFECTNET_CAT_EMOT)
+    chart_ROC_AUC, roc_auc_per_label, roc_auc_ovr = compute_ROC_AUC_OVR(all_targets, all_preds_distrib, AFFECTNET_CAT_EMOT)
 
     # Log the confusion matrix
     conf_matrix = confusion_matrix(all_targets.numpy(), all_preds_labels.numpy(), normalize = 'true')

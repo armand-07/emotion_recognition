@@ -109,7 +109,14 @@ def define_optimizer(model:torch.nn.Module, optimizer_name:str, lr:float, moment
 def get_pred_distilled_model(model:torch.nn.Module, imgs:torch.Tensor, output_method:str) -> torch.Tensor:
     """Get the predictions of the distilled model. The function returns the 
     predictions of the distilled model based on the output output method chosen. 
-    It can be chosen between 'class', 'distill' or 'both' (sum between 'distill' and 'class' logits)."""
+    It can be chosen between 'class', 'distill' or 'both' (sum between 'distill' and 'class' logits).
+    Params:
+        - model (torch.nn.Module): The model to use to predict the images.
+        - imgs (torch.Tensor): The images to predict.
+        - output_method (str): The output method to use. It can be 'class', 'distill' or 'both'.
+    Returns:
+        - torch.Tensor: The predictions of the distilled model based on the output method chosen.
+    """
     pred, pred_dist = model(imgs)
     if output_method == "class":
         return pred
@@ -189,7 +196,17 @@ def resnet50(pretrained:bool = True, weights:str = "none") -> torch.nn.Module:
 
 
 def resnet101(pretrained:bool = True, weights:str = "none") -> torch.nn.Module:
-    """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 2048"""
+    """Create a ResNet101 model with the specified pretrained weights. The expected input 
+    size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 2048.
+    Params:
+        - pretrained (bool): If True, the model is created with pre-trained weights with imagenet. 
+            If False, the model is created with random weights.
+        - weights (str): The weights for the model. If "none", the model is created with 
+            the past weights. If not, the model is created with the ".pt" or ".pth" weights of the 
+            given path. 
+    Returns:
+        - torch.nn.Module: The created ResNet101 model.
+    """
     if pretrained: # equivalent to ResNet50_Weights.IMAGENET1K_V1
         model = models.resnet101(weights = "DEFAULT")
     else:
@@ -204,7 +221,13 @@ def resnet101(pretrained:bool = True, weights:str = "none") -> torch.nn.Module:
 
 
 def resnext50_32x4d (pretrained:bool = True) -> torch.nn.Module:
-    """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 2048"""
+    """ Create a ResNeXt50_32x4d model with the specified pretrained weights. The expected input size is defined as 224x224x3, 
+    so the flattened tensor after all convolutional layers is 2048.
+    Params:
+        - pretrained (bool): If True, the model is created with pre-trained weights with imagenet. 
+            If False, the model is created with random weights.
+    Returns:
+        - torch.nn.Module: The created ResNeXt50_32x4d model."""
     if pretrained:
         model = models.resnext50_32x4d(weights = "DEFAULT") # equivalent to ResNeXt50_32x4d_Weights.IMAGENET1K_V1
     else:
@@ -215,7 +238,6 @@ def resnext50_32x4d (pretrained:bool = True) -> torch.nn.Module:
 
 def poster_v2(weights:str = "none") -> torch.nn.Module:
     """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 1000"""
-    
     # create model
     model = pyramid_trans_expr2(img_size=224, num_classes=8)
     if weights.lower() == "none":
@@ -340,6 +362,7 @@ def ViT_base16(pretrained:bool = True, weights:str = "none") -> torch.nn.Module:
 
 
 class Hook():
+    """Hook to get the outputs from a distilled model."""
     def __init__(self, module):
         self.hook = module.register_forward_hook(self.hook_fn)
     def hook_fn(self, module, input, output):
@@ -350,6 +373,8 @@ class Hook():
 
 
 class DeiT_model(nn.Module):
+    """Wrapper class to get the outputs from a distilled model. Both results 
+    from the head are saved."""
     def __init__(self, base_model):
         super().__init__()  # Call to parent class's __init__ method
         self.base_model = base_model

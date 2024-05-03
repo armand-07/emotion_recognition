@@ -281,7 +281,7 @@ def validate_distillation(val_loader: DataLoader, model: torch.nn.Module, criter
         
         # Compute metrics
         metrics = save_val_wandb_metrics_dist(acc1, acc2, val_loader, batch_size, all_targets, all_preds_dist, 
-                           all_preds_labels, global_epoch_loss, epoch, global_cosine_sim, run, test)
+                           all_preds_labels, global_epoch_loss, global_cosine_sim, epoch, run, test)
     return metrics
 
 
@@ -496,7 +496,7 @@ def main(mode, wandb_id):
         
     elif mode == 'sweep':
         # Path of the parameters file
-        config_sweep_path = Path("config_deit_small_posterV2_hyperparameter_tunning_weighted_loss.yaml")
+        config_sweep_path = Path("config_deit_small_efficientnet_hyperparameter_tunning_weighted_loss.yaml")
         # Read data preparation parameters
         with open(config_sweep_path, "r", encoding='utf-8') as config_file:
             try:

@@ -5,11 +5,9 @@ import argparse
 
 import torch
 from torch import nn
+import numpy as np
 
 import wandb
-
-import numpy as np
-import random
 
 from src import PROCESSED_AFFECTNET_DIR, NUMBER_OF_EMOT, MODELS_DIR, AFFECTNET_CAT_EMOT
 from src.models import architectures as arch
@@ -21,7 +19,16 @@ from config import wandbAPIkey
 
 
 
-def main(wandb_id):   
+def main(wandb_id:str = None) -> None:
+    """ Main function to evaluate the model. If a wandb_id is provided, the model weights are downloaded from 
+    the Weights and Biases server. If not, the parameters are read from the params.yaml file. The model is then
+    loaded and the test set is evaluated. If distillation is enabled, the model is evaluated using the three
+    different embedding methods. The results are logged to the Weights and Biases server.
+    Params:
+        - wandb_id (str): The id of the Weights and Biases run to download the model weights.
+    Returns:
+        - None
+    """
     wandb.login(key=wandbAPIkey)
     run = wandb.init(
     entity="armand-07",
@@ -82,6 +89,7 @@ def main(wandb_id):
 
 
 def parse_args():
+    """Parse the arguments of the script."""
     parser = argparse.ArgumentParser()
     parser.add_argument('--wandb_id', type=str, default=None, help='Run id to take the model weights')
     return parser.parse_args() 

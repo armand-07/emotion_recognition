@@ -1,4 +1,4 @@
-from typing import Union, Tuple
+from typing import Tuple
 
 import cv2
 import torch
@@ -7,7 +7,12 @@ import numpy as np
 
 def detect_faces_HAAR_cascade(img:np.array, pretrained_model) -> np.array:
     """ Detects faces in an image using the given Haar cascade pretrained model. 
-    Returns in standard bbox format: [x, y, w, h]
+    The model returns in standard bbox format: [x, y, w, h]
+    Params:
+        - img: Image to detect faces
+        - pretrained_model: Haar cascade model
+    Returns:
+        - faces_bbox (np.array): Bounding boxes of the detected faces
     """
     # Convert the image to grayscale
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -44,18 +49,18 @@ def transform_bbox_to_square(bboxes: torch.Tensor, img_width:int, img_height:int
 
 
 
-def detect_faces_YOLO(img, pretrained_model, format = 'xywh', verbose=False) -> Tuple[
-    torch.Tensor, torch.Tensor]:
+def detect_faces_YOLO(img:np.array, pretrained_model:ultralytics.YOLO, format:str = 'xywh', verbose:bool=False
+                      ) -> Tuple[torch.Tensor, torch.Tensor]:
     """ Detects faces in an image using the given YOLO pretrained model. The bbox is returned 
     with the specified bbox format.
     Params:
-        - img: Image to detect faces
-        - pretrained_model: YOLO model
-        - format: Format of the bbox returned. Options: 'xywh-center', 'xywh', 'xyxy'
-        - verbose: If True, it prints model information
+        - img (np.array): Image to detect faces
+        - pretrained_model (ultralytics.YOLO): YOLO model
+        - format (str): Format of the bbox returned. Options: 'xywh-center', 'xywh', 'xyxy'
+        - verbose (bool): If True, it prints model information
     Returns:
-        - boxes: Bounding boxes of the detected faces
-        - conf: Confidence of the detection
+        - boxes (torch.Tensor): Bounding boxes of the detected faces
+        - conf (torch.Tensor): Confidence of the detection
     """
     # Make inference
     results = pretrained_model.predict(img, verbose = verbose)
@@ -80,20 +85,21 @@ def detect_faces_YOLO(img, pretrained_model, format = 'xywh', verbose=False) -> 
 
 
 
-def track_faces_YOLO(img:np.array, pretrained_model:ultralytics.YOLO, format = 'xywh', verbose=False, device = 'cuda') -> Tuple[
-    torch.Tensor, torch.Tensor, torch.Tensor]:
+def track_faces_YOLO(img:np.array, pretrained_model:ultralytics.YOLO, format:str = 'xywh', 
+                     verbose:bool=False, device:torch.device = 'cuda') -> Tuple[
+                         torch.Tensor, torch.Tensor, torch.Tensor]:
     """ Detects faces in an image using the given YOLO pretrained model and uses a tracker algorithm (botsort) 
-    to assign an id to the bbox that should be the same between frames. The bbox is returned with the specified bbox format.
-    More info about botsort in: https://docs.ultralytics.com/modes/track/#features-at-a-glance.
+    to assign an id to the bbox that should be the same between frames. The bbox is returned with the specified
+    bbox format. More info about botsort in: https://docs.ultralytics.com/modes/track/#features-at-a-glance.
     Params:
-        - img: Image to detect faces
-        - pretrained_model: YOLO model
-        - format: Format of the bbox returned. Options: 'xywh-center', 'xywh', 'xyxy'
-        - verbose: If True, it prints model information
+        - img (np.array): Image to detect faces
+        - pretrained_model (ultralytics.YOLO): YOLO model
+        - format (str): Format of the bbox returned. Options: 'xywh-center', 'xywh', 'xyxy'
+        - verbose (bool): If True, it prints model information
     Returns:
-        - boxes: Bounding boxes of the detected faces
-        - bbox_ids: Id of the detected faces
-        - conf: Confidence of the detection
+        - boxes (torch.Tensor): Bounding boxes of the detected faces
+        - bbox_ids (torch.Tensor): Id of the detected faces
+        - conf (torch.Tensor): Confidence of the detection
     """
     # Make inference
     results = pretrained_model.track(img, verbose = verbose, persist=True, device = device) # Persist the tracking between frames botsort

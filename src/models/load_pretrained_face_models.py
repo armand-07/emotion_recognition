@@ -11,6 +11,7 @@ FACE_DETECT_DIR = os.path.join(MODELS_DIR, "face_recognition")
 
 
 def load_HAAR_cascade_face_detection():
+    """ Loads the HAAR cascade method for face detection using the OpenCV library."""
     # Load HAAR cascade method
     try:
         detector_HAAR_cascade = cv2.CascadeClassifier(os.path.join(cv2.data.haarcascades, 'haarcascade_frontalface_default.xml'))
@@ -64,7 +65,14 @@ def download_YOLO_model_face_recognition(size:str = "medium", directory:str = FA
 
 
 def load_YOLO_model_face_recognition(device:torch.device, size:str = "medium",  directory:str = FACE_DETECT_DIR) -> ultralytics.YOLO:
-    """ Downloads the pretrained model for the YOLO depending on specified size.
+    """ Loads the pretrained model for the YOLO depending on specified size. If the model is not found 
+    it will be downloaded on the specified directory. The author of the weights can be found in 
+    Params:
+        - device (torch.device): Device to use for the model
+        - size(str): Size of the model to download. Possible values: nano, medium, large
+        - directory(str): Directory to load the model
+    Returns:
+        - model (ultralytics.YOLO): YOLO model for face recognition
     """
     assert device is not None, "Please specify the device to use for the model."
     
