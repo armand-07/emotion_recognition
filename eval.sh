@@ -4,4 +4,5 @@
 #SBATCH --mem 32G
 #SBATCH --gres=gpu:1
 #SBATCH --time 0:15:00 
-python -m src.models.eval_model --wandb_id gentle-sweep-7
+python -m src.models.eval_model --wandb_id iconic-sweep-10
+
