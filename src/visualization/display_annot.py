@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from random import randint
 from PIL import Image
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm
+cm = plt.get_cmap('magma')
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
 from src import INTERIM_DATA_DIR, AFFECTNET_CAT_EMOT
@@ -127,6 +127,18 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
             text = 'Unknown' # Unknown detection as the bbox_id is -1
         else:
             text = str(int(i))+":"+labels[i]
+
+        # If cls_weight is not None, we will display the class attention map over bbox
+        if cls_weight is not None:
+            cls_resized = F.interpolate(cls_weight[i].view(1, 1, 14, 14), (w, h), mode='bilinear').view(w, h).numpy()
+            # Normalize cls_resized to the range [0, 1] to properly apply the color map
+            cls_resized_np = (cls_resized - cls_resized.min()) / (cls_resized.max() - cls_resized.min())
+            # Apply the magma color map
+            cls_colored = cm(cls_resized_np, bytes=True)
+            # The resulting cls_colored is an RGBA image. If you need a 3-channel RGB image, you can remove the alpha channel:
+            cls_colored = cv2.cvtColor(cls_colored, cv2.COLOR_RGBA2BGR)
+            # Blend the colored class attention map with the image
+            img[y:y+h, x:x+w] = cv2.addWeighted(img[y:y+h, x:x+w] , 0.55, cls_colored, 0.45, 0)
             
         # First set the thickness of the bbox
         bbox_thickness = int(round(max_img_size / 500))
@@ -144,19 +156,7 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
         img = cv2.rectangle(img, (x, y - int(h_text*1.5)), (x + w_text, y), background_color, -1)
         img = cv2.putText(img, text, (x, y - int(h_text*0.3)),
                                 cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_color, int(text_thickness), lineType = cv2.LINE_AA)
-        if cls_weight is not None:
-            cls_resized = F.interpolate(cls_weight[i].view(1, 1, 14, 14), (w, h), mode='bilinear').view(w, h, 1)
-            # Apply the magma color map to cls_resized
-            cls_colored = cm.magma(cls_resized.numpy(), bytes=True)  # Convert to numpy array for matplotlib
 
-            # Convert the colored class attention map to BGR format for OpenCV
-            cls_colored_bgr = cv2.cvtColor(cls_colored, cv2.COLOR_RGBA2BGR)
-
-            # Blend the colored class attention map with the image
-            img = cv2.addWeighted(img, 1 - 0.65, cls_colored_bgr, 0.35, 0)
-
-
-            
     if display:
         # Displaying the image  
         print("Displaying the image")
