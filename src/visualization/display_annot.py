@@ -97,7 +97,7 @@ def plot_mean_emotion_distribution(img:np.array, output_preds: torch.Tensor, fig
 
 
 def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array = None, cls_weight:torch.Tensor = None,  bbox_format:str ="xywh", 
-                   display:bool = True, ) -> np.array:
+                   display:bool = True, BGR_format:bool = False) -> np.array:
     """ Displays the bounding boxes and emotion annotations
     """
     height, width, _ = img.shape
@@ -136,7 +136,10 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
             # Apply the magma color map
             cls_colored = cm(cls_resized_np, bytes=True)
             # The resulting cls_colored is an RGBA image. If you need a 3-channel RGB image, you can remove the alpha channel:
-            cls_colored = cv2.cvtColor(cls_colored, cv2.COLOR_RGBA2BGR)
+            if not BGR_format:
+                cls_colored = cv2.cvtColor(cls_colored, cv2.COLOR_RGBA2BGR)
+            else:
+                cls_colored = cv2.cvtColor(cls_colored, cv2.COLOR_RGBA2RGB)
             # Blend the colored class attention map with the image
             img[y:y+h, x:x+w] = cv2.addWeighted(img[y:y+h, x:x+w] , 0.55, cls_colored, 0.45, 0)
             
