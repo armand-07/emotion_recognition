@@ -2,19 +2,15 @@ from typing import Tuple
 import requests
 import os
 
-import torchvision.models as models
-import torch.nn as nn
-from torch.nn import functional as F
 import torch
 import albumentations
 import ultralytics
 import cv2
 
-import random
 import numpy as np
 import wandb
 
-from src import NUMBER_OF_EMOT, MODELS_DIR, AFFECTNET_CAT_EMOT, PROCESSED_AFFECTNET_DIR, FACE_DETECT_DIR
+from src import NUMBER_OF_EMOT, FACE_DETECT_DIR
 import src.models.architectures as arch
 from src.data.dataset import data_transforms
 
@@ -137,7 +133,7 @@ def load_video_models(wandb_id:str, face_detector_size:str = "medium", view_emot
 
     # Lastly load face detector
     face_model = load_YOLO_model_face_recognition(size = face_detector_size, device = device)
-    
+
     if view_emotion_model_attention and params['arch'].startswith('deit'):
         selected_layer = -1 # last layer, de last attention map before predicting the emotion
         emotion_model.base_model.blocks[selected_layer].attn.forward = arch.attention_forward_wrapper(emotion_model.base_model.blocks[selected_layer].attn)
