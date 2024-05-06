@@ -5,9 +5,11 @@ from typing import Tuple
 import cv2
 import numpy as np
 import torch
+import torch.nn.functional as F
 from random import randint
 from PIL import Image
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
 from src import INTERIM_DATA_DIR, AFFECTNET_CAT_EMOT
@@ -94,8 +96,8 @@ def plot_mean_emotion_distribution(img:np.array, output_preds: torch.Tensor, fig
 
 
 
-def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array = None, bbox_format:str ="xywh", 
-                   display:bool = True) -> np.array:
+def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array = None, cls_weight:torch.Tensor = None,  bbox_format:str ="xywh", 
+                   display:bool = True, ) -> np.array:
     """ Displays the bounding boxes and emotion annotations
     """
     height, width, _ = img.shape
@@ -142,6 +144,19 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
         img = cv2.rectangle(img, (x, y - int(h_text*1.5)), (x + w_text, y), background_color, -1)
         img = cv2.putText(img, text, (x, y - int(h_text*0.3)),
                                 cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_color, int(text_thickness), lineType = cv2.LINE_AA)
+        if cls_weight is not None:
+            cls_resized = F.interpolate(cls_weight[i].view(1, 1, 14, 14), (w, h), mode='bilinear').view(w, h, 1)
+            # Apply the magma color map to cls_resized
+            cls_colored = cm.magma(cls_resized.numpy(), bytes=True)  # Convert to numpy array for matplotlib
+
+            # Convert the colored class attention map to BGR format for OpenCV
+            cls_colored_bgr = cv2.cvtColor(cls_colored, cv2.COLOR_RGBA2BGR)
+
+            # Blend the colored class attention map with the image
+            img = cv2.addWeighted(img, 1 - 0.65, cls_colored_bgr, 0.35, 0)
+
+
+            
     if display:
         # Displaying the image  
         print("Displaying the image")

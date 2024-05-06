@@ -111,7 +111,7 @@ def load_YOLO_model_face_recognition(device:torch.device, size:str = "medium",  
 
 
 
-def load_video_models(wandb_id:str, face_detector_size:str = "medium") -> Tuple[
+def load_video_models(wandb_id:str, face_detector_size:str = "medium", view_emotion_model_attention = False) -> Tuple[
     ultralytics.YOLO, torch.nn.Module, albumentations.Compose, torch.device]:
     """Function to load the models and the face detector.
     Args:
@@ -137,6 +137,11 @@ def load_video_models(wandb_id:str, face_detector_size:str = "medium") -> Tuple[
 
     # Lastly load face detector
     face_model = load_YOLO_model_face_recognition(size = face_detector_size, device = device)
+    
+    if view_emotion_model_attention and params['arch'].startswith('deit'):
+        selected_layer = -1 # last layer, de last attention map before predicting the emotion
+        emotion_model.base_model.blocks[selected_layer].attn.forward = arch.attention_forward_wrapper(emotion_model.base_model.blocks[selected_layer].attn)
+
     return face_model, emotion_model, distilled_model, face_transforms, device
 
 

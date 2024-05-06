@@ -53,3 +53,4 @@ inference:
   show_mean_emotion_distrib: True
   save_result: True
   show_inference: False
+  view_emotion_model_attention: True

@@ -108,7 +108,11 @@ def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, nam
                                                                                                 face_transforms, people_detected, params)
             
             if params['save_result'] or params['show_inference']: # Show the visual results if needed
-                frame = plot_bbox_emot(frame, faces_bbox, labels, ids, bbox_format ="xywh", display = False)
+                if params['view_emotion_model_attention']:
+                    cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu') 
+                else:
+                    cls_weight = None
+                frame = plot_bbox_emot(frame, faces_bbox, labels, ids, cls_weight, bbox_format ="xywh", display = False)
                 # Display the mean sentiment of the people in the frame
                 if params['show_mean_emotion_distrib']:
                     frame, fig, ax, distribution_container = plot_mean_emotion_distribution(frame, processed_preds, fig, ax, distribution_container)
@@ -233,7 +237,8 @@ def main(mode: str, input_path: str, output_dir:str) -> None:
             print(exc)
     params['job_type'] = "test"
 
-    face_model, emotion_model, distilled_model, face_transforms, device = arch_v.load_video_models(params['wandb_id_emotion_model'], params['face_detector_size'])
+    face_model, emotion_model, distilled_model, face_transforms, device = arch_v.load_video_models(params['wandb_id_emotion_model'], params['face_detector_size'], 
+                                                                                                   params['view_emotion_model_attention'])
     params['distilled_model'] = distilled_model
     # Start with inference
     if mode == 'stream':

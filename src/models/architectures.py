@@ -104,9 +104,6 @@ def define_optimizer(model:torch.nn.Module, optimizer_name:str, lr:float, moment
     
     return optimizer
 
-def get_pred (model:torch.nn.Module, imgs:torch.Tensor) -> torch.Tensor:
-    print("Getting predictions")
-
 
 
 def get_pred_distilled_model(model:torch.nn.Module, imgs:torch.Tensor, output_method:str) -> torch.Tensor:
@@ -361,6 +358,28 @@ def ViT_base16(pretrained:bool = True, weights:str = "none") -> torch.nn.Module:
         model.load_state_dict(weights)
     
     return model
+
+
+
+def attention_forward_wrapper(attn_obj):
+    """ Change in forward function to save attention map to later on be able to visualize it
+    Source: https://github.com/huggingface/pytorch-image-models/discussions/1232"""
+    def my_forward(x):
+        B, N, C = x.shape
+        qkv = attn_obj.qkv(x).reshape(B, N, 3, attn_obj.num_heads, C // attn_obj.num_heads).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv.unbind(0)   # make torchscript happy (cannot use tensor as tuple)
+
+        attn = (q @ k.transpose(-2, -1)) * attn_obj.scale
+        attn = attn.softmax(dim=-1)
+        attn = attn_obj.attn_drop(attn)
+        attn_obj.attn_map = attn
+        attn_obj.cls_attn_map = attn[:, :, 0, 2:]
+
+        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        x = attn_obj.proj(x)
+        x = attn_obj.proj_drop(x)
+        return x
+    return my_forward
 
 
 
