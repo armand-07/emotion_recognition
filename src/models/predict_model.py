@@ -48,7 +48,7 @@ def infer_screen(face_model:ultralytics.YOLO, emotion_model: torch.nn.Module, de
     while True:
         frame = np.array(pg.screenshot())
         faces_bbox, labels, ids, processed_preds, people_detected = arch_v.get_pred_from_frame(frame, face_model, emotion_model, device, face_transforms, people_detected, params)
-        if params['view_emotion_model_attention']:
+        if params['view_emotion_model_attention'] and len(ids) != 0:
             cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu')
         else:
             cls_weight = None
@@ -83,7 +83,7 @@ def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_mode
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     print(f"Camera resolution: {width}x{height}")
     cv2.namedWindow('Streaming inference', cv2.WINDOW_NORMAL)
-    cv2.resizeWindow('Streaming inference', 1920, 1080)
+    cv2.resizeWindow('Streaming inference', width, height)
     # Set variables if parameters are activated
     if params['tracking']:
         people_detected = dict()
@@ -96,8 +96,9 @@ def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_mode
         ret, frame = cap.read()
         if ret == True:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) # Convert the frame to RGB
-            faces_bbox, labels, ids, processed_preds, people_detected = arch_v.get_pred_from_frame(frame, face_model, emotion_model, device, face_transforms, people_detected, params)
-            if params['view_emotion_model_attention']:
+            faces_bbox, labels, ids, processed_preds, people_detected = arch_v.get_pred_from_frame(frame, face_model, emotion_model, 
+                                                                                                   device, face_transforms, people_detected, params)
+            if params['view_emotion_model_attention'] and len(ids) != 0: # If there are faces detected it can be observed the attention map
                 cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu')
             else:
                 cls_weight = None
@@ -158,7 +159,7 @@ def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, nam
                                                                                                 face_transforms, people_detected, params)
             
             if params['save_result'] or params['show_inference']: # Show the visual results if needed
-                if params['view_emotion_model_attention']:
+                if params['view_emotion_model_attention'] and len(ids) != 0:
                     cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu') 
                 else:
                     cls_weight = None
@@ -211,7 +212,7 @@ def process_file(input_path:str, output_dir:str, face_model: ultralytics.YOLO, e
         start = time.time()
         faces_bbox, labels, ids, processed_preds, people_detected = arch_v.get_pred_from_frame(img, face_model, emotion_model, device, face_transforms, people_detected, params_image)
         if params['save_result'] or params['show_inference']: # Show the visual results if needed
-            if params['view_emotion_model_attention']:
+            if params['view_emotion_model_attention'] and len(ids) != 0:
                 cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu')
             else:
                 cls_weight = None

@@ -144,7 +144,7 @@ def load_video_models(wandb_id:str, face_detector_size:str = "medium", view_emot
 
 def transform_bbox_to_square(bboxes: torch.Tensor, img_width:int, img_height:int) -> torch.Tensor:
     """Converts the input bbox to a square bbox centered in the same position as before. If the bounding box exceeds 
-    the image's limit it clips it to the image's limit. The returned bbox format is [x, y, w, h], where x,y are the 
+    the image's limit it clips it to the image's limit (so the bbox is no longer 1:1). The returned bbox format is [x, y, w, h], where x,y are the 
     coordinates of the top-left corner.
     Params:
         - bboxes(torch.Tensor): Bounding boxes in the format [x, y, w, h]. Expects the coordinates of the center of the bbox 
@@ -161,11 +161,15 @@ def transform_bbox_to_square(bboxes: torch.Tensor, img_width:int, img_height:int
     squared_bboxes[:, 3] = max_dims  # Update height
     squared_bboxes[:, 0] = bboxes[:, 0] - max_dims / 2  # Update x coordinates to top-left corner
     squared_bboxes[:, 1] = bboxes[:, 1] - max_dims / 2  # Update y coordinates to top-left corner
-    # Ensure the bbox is inside the image
+    # Ensure the bbox is inside the left and top limits, subtracts the negative values to width and height (so bbox is not 1:1 on limits)
+    squared_bboxes[:, 2] = squared_bboxes[:, 2] + torch.clamp(squared_bboxes[:, 0], max = 0)
+    squared_bboxes[:, 3] = squared_bboxes[:, 3] + torch.clamp(squared_bboxes[:, 1], max = 0)
     squared_bboxes[:, 0] = torch.clamp(squared_bboxes[:, 0], min = 0)
     squared_bboxes[:, 1] = torch.clamp(squared_bboxes[:, 1], min = 0)
-    squared_bboxes[:, 2] = torch.min(squared_bboxes[:, 2], img_width - squared_bboxes[:, 0])
-    squared_bboxes[:, 3] = torch.min(squared_bboxes[:, 3], img_height - squared_bboxes[:, 1])
+    # Ensure the bbox is inside the right and bottom limits of the image (so bbox is not 1:1 on limits)
+    squared_bboxes[:, 2] = torch.clamp(squared_bboxes[:, 2], max = img_width - squared_bboxes[:, 0])
+    squared_bboxes[:, 3] = torch.clamp(squared_bboxes[:, 3], max = img_height - squared_bboxes[:, 1])
+
     return squared_bboxes
 
 

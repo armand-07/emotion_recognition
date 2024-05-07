@@ -97,8 +97,8 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
                    display:bool = True) -> np.array:
     """ Displays the bounding boxes and emotion annotations
     """
-    height, width, _ = img.shape
-    max_img_size = max(height, width)
+    img_height, img_width, _ = img.shape
+    max_img_size = max(img_height, img_width)
     # Define the parameters for the rectangle
     background_color = (0, 255, 0) # Green color in RGB
     text_color = (0, 0, 0) # White color in RGB
@@ -125,13 +125,23 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
         else:
             text = str(int(i))+":"+labels[i]
 
-        # If cls_weight is not None, we will display the class attention map over bbox
+        # If cls_weight is not None, it will display the class attention map with what the emotion model is seeing
         if cls_weight is not None:
-            max_length = max(h, w)
-            x_plot = int(x + w/2 - max_length/2)
-            y_plot = int(y + h/2 - max_length/2)
+            max_size = max(w, h)
+            # Correct x_plot and y_plot to avoid going out of the image on the left and top (if corrected is not 1:1)
+            x_plot = int((x+w/2) - max_size/2)
+            y_plot = int((y+h/2) - max_size/2)
+            w_plot = max_size + min(x_plot, 0)
+            h_plot = max_size + min(y_plot, 0)
+            x_plot = max(x_plot, 0)
+            y_plot = max(y_plot, 0)
+            # Correct h_plot and w_plot to avoid going out of the image on the right and bottom (if corrected is not 1:1)
+            w_plot = min(w_plot, img_width - x_plot)
+            h_plot = min(h_plot, img_height - y_plot)
 
-            cls_resized = F.interpolate(cls_weight[i].view(1, 1, 14, 14), (max_length, max_length), mode='bilinear').view(max_length, max_length).numpy()
+            # Resize the 14x14 class attention map to the plot size using bilinear interpolation
+            cls_resized = F.interpolate(cls_weight[i].view(1, 1, 14, 14), (h_plot, w_plot), 
+                                        mode='bilinear').view(h_plot, w_plot).numpy()
             # Normalize cls_resized to the range [0, 1] to properly apply the color map
             cls_resized_np = (cls_resized - cls_resized.min()) / (cls_resized.max() - cls_resized.min())
             # Apply the magma color map
@@ -139,8 +149,8 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
             # Return to RGB format
             cls_colored = cv2.cvtColor(cls_colored, cv2.COLOR_RGBA2RGB)
             # Blend the colored class attention map with the image
-            img[y_plot:y_plot+max_length, x_plot:x_plot+max_length] = cv2.addWeighted(
-                img[y_plot:y_plot+max_length, x_plot:x_plot+max_length] , 0.55, cls_colored, 0.45, 0)
+            img[y_plot:y_plot+h_plot, x_plot:x_plot+w_plot] = cv2.addWeighted(
+                img[y_plot:y_plot+h_plot, x_plot:x_plot+w_plot], 0.55, cls_colored, 0.45, 0)
             
         # First set the thickness of the bbox
         bbox_thickness = int(round(max_img_size / 500))
