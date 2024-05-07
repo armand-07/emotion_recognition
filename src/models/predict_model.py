@@ -7,13 +7,59 @@ from pathlib import Path
 import yaml
 
 import cv2
+import pyautogui as pg
 import torch
+import numpy as np
 import albumentations
 import ultralytics
 
 from src import INFERENCE_DIR, NUMBER_OF_EMOT
 import src.models.architectures_video as arch_v
 from src.visualization.display_annot import plot_bbox_emot, plot_mean_emotion_distribution, create_figure_mean_emotion_distribution
+
+
+
+def infer_screen(face_model:ultralytics.YOLO, emotion_model: torch.nn.Module, device: torch.device, 
+                face_transforms:albumentations.Compose, params:dict) -> None:
+    """Function to make inference in a screen. It shows the results in a window.
+    Args:
+        - face_model (ultralytics.YOLO): The face detector model.
+        - emotion_model (torch.nn.Module): The emotion model.
+        - device (torch.device): The device to be used.
+        - face_transforms (albumentations.Compose): The face transforms.
+        - params (dict): The parameters to be used for the inference.
+    Returns:
+        - None
+    """
+    # Get the video properties
+    screenshot = np.array(pg.screenshot())
+    height, width, _ = screenshot.shape
+    print(f"Camera resolution: {width}x{height}")
+    cv2.namedWindow('Streaming inference', cv2.WINDOW_NORMAL)
+    cv2.resizeWindow('Streaming inference', 1920, 1080)
+    # Set variables if parameters are activated
+    if params['tracking']:
+        people_detected = dict()
+        people_detected[-1] = [torch.ones(NUMBER_OF_EMOT).to(device)] # If no tracking id, it returns a uniform distribution
+    if params['show_mean_emotion_distrib']:
+        fig, ax, distribution_container = create_figure_mean_emotion_distribution(height, width)
+
+    # Read until video is completed
+    while True:
+        frame = np.array(pg.screenshot())
+        faces_bbox, labels, ids, processed_preds, people_detected = arch_v.get_pred_from_frame(frame, face_model, emotion_model, device, face_transforms, people_detected, params)
+        if params['view_emotion_model_attention']:
+            cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu')
+        else:
+            cls_weight = None
+        frame = plot_bbox_emot(frame, faces_bbox, labels, ids, cls_weight, bbox_format ="xywh", display = False)
+        # Display the mean sentiment of the people in the frame
+        if params['show_mean_emotion_distrib']:
+            frame, fig, ax, distribution_container = plot_mean_emotion_distribution(frame, processed_preds, fig, ax, distribution_container)
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) # Convert the frame to standard BGR before printing
+        cv2.imshow('Streaming inference', frame)
+        if cv2.waitKey(25) & 0xFF == ord('q'): # Press Q on keyboard to exit
+            break
 
 
 
@@ -253,6 +299,9 @@ def main(mode: str, input_path: str, output_dir:str) -> None:
     if mode == 'stream':
         cap = cv2.VideoCapture(0)
         infer_stream(cap, face_model, emotion_model, device, face_transforms, params)
+
+    elif mode == 'screen':
+        infer_screen(face_model, emotion_model, device, face_transforms, params)
 
     elif mode == 'save':
         input_path = os.path.join(INFERENCE_DIR, input_path)

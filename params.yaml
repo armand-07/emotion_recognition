@@ -44,7 +44,7 @@ eval:
 
 inference:
   wandb_id_emotion_model: "comic-sweep-22"
-  face_detector_size: "nano"
+  face_detector_size: "medium"
   face_threshold: 0.65
   tracking: True
   postprocessing: "temporal_average"
