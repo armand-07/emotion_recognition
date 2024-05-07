@@ -156,16 +156,17 @@ def transform_bbox_to_square(bboxes: torch.Tensor, img_width:int, img_height:int
             The shape is [n, 4], where n is the number of bboxes.
     """
     max_dims = torch.max(bboxes[:, 2], bboxes[:, 3])  # Get the maximum between width and height per each detected face
-    bboxes[:, 2] = max_dims  # Update width
-    bboxes[:, 3] = max_dims  # Update height
-    bboxes[:, 0] = bboxes[:, 0] - max_dims / 2  # Update x coordinates to top-left corner
-    bboxes[:, 1] = bboxes[:, 1] - max_dims / 2  # Update y coordinates to top-left corner
+    squared_bboxes = torch.zeros_like(bboxes)
+    squared_bboxes[:, 2] = max_dims  # Update width
+    squared_bboxes[:, 3] = max_dims  # Update height
+    squared_bboxes[:, 0] = bboxes[:, 0] - max_dims / 2  # Update x coordinates to top-left corner
+    squared_bboxes[:, 1] = bboxes[:, 1] - max_dims / 2  # Update y coordinates to top-left corner
     # Ensure the bbox is inside the image
-    bboxes[:, 0] = torch.clamp(bboxes[:, 0], min = 0)
-    bboxes[:, 1] = torch.clamp(bboxes[:, 1], min = 0)
-    bboxes[:, 2] = torch.min(bboxes[:, 2], img_width - bboxes[:, 0])
-    bboxes[:, 3] = torch.min(bboxes[:, 3], img_height - bboxes[:, 1])
-    return bboxes
+    squared_bboxes[:, 0] = torch.clamp(squared_bboxes[:, 0], min = 0)
+    squared_bboxes[:, 1] = torch.clamp(squared_bboxes[:, 1], min = 0)
+    squared_bboxes[:, 2] = torch.min(squared_bboxes[:, 2], img_width - squared_bboxes[:, 0])
+    squared_bboxes[:, 3] = torch.min(squared_bboxes[:, 3], img_height - squared_bboxes[:, 1])
+    return squared_bboxes
 
 
 
@@ -324,13 +325,13 @@ def get_raw_pred_from_frame(img:np.array, face_model:ultralytics.YOLO, emotion_m
         [faces_bbox, confidence_YOLO] = detect_faces_YOLO(img, face_model, format = 'xywh-center')
         bbox_ids = torch.arange(len(faces_bbox), dtype=torch.int)
 
-    filtered_faces = faces_bbox[confidence_YOLO > face_threshold]
+    filtered_faces_bbox = faces_bbox[confidence_YOLO > face_threshold]
     filtered_ids = bbox_ids[confidence_YOLO > face_threshold]
     
-    if len(filtered_faces) != 0:
+    if len(filtered_faces_bbox) != 0:
         img_height, img_width, _ = img.shape
-        filtered_faces = transform_bbox_to_square(filtered_faces, img_width, img_height)
-        face_batch = create_faces_batch(img, face_transforms, filtered_faces, device)
+        squared_bbox = transform_bbox_to_square(filtered_faces_bbox, img_width, img_height)
+        face_batch = create_faces_batch(img, face_transforms, squared_bbox, device)
         with torch.no_grad():
             face_batch.to(device)
             if distilled_model:
@@ -340,7 +341,7 @@ def get_raw_pred_from_frame(img:np.array, face_model:ultralytics.YOLO, emotion_m
     else: # If no faces are detected, return empty tensors
         raw_preds = torch.empty(0).to(device)
     
-    return filtered_faces, raw_preds, filtered_ids
+    return filtered_faces_bbox, raw_preds, filtered_ids
 
 
 

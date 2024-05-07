@@ -94,7 +94,7 @@ def plot_mean_emotion_distribution(img:np.array, output_preds: torch.Tensor, fig
 
 
 def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array = None, cls_weight:torch.Tensor = None,  bbox_format:str ="xywh", 
-                   display:bool = True, BGR_format:bool = False) -> np.array:
+                   display:bool = True) -> np.array:
     """ Displays the bounding boxes and emotion annotations
     """
     height, width, _ = img.shape
@@ -108,9 +108,9 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
             x, y, w, h = bbox[i].tolist()
 
         elif bbox_format == "xywh-center":
-            x, y, w, h = bbox[i].tolist()
-            x = x-int(w/2); 
-            y = y-int(h/2)
+            x_center, y_center, w, h = bbox[i].tolist()
+            x = x_center-int(w/2)
+            y = y_center-int(h/2)
         elif bbox_format == "xyxy":
             [x, y, x2, y2] = bbox[i].tolist()
             w = x2 - x
@@ -127,7 +127,11 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
 
         # If cls_weight is not None, we will display the class attention map over bbox
         if cls_weight is not None:
-            cls_resized = F.interpolate(cls_weight[i].view(1, 1, 14, 14), (w, h), mode='bilinear').view(w, h).numpy()
+            max_length = max(h, w)
+            x_plot = int(x + w/2 - max_length/2)
+            y_plot = int(y + h/2 - max_length/2)
+
+            cls_resized = F.interpolate(cls_weight[i].view(1, 1, 14, 14), (max_length, max_length), mode='bilinear').view(max_length, max_length).numpy()
             # Normalize cls_resized to the range [0, 1] to properly apply the color map
             cls_resized_np = (cls_resized - cls_resized.min()) / (cls_resized.max() - cls_resized.min())
             # Apply the magma color map
@@ -135,7 +139,8 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
             # Return to RGB format
             cls_colored = cv2.cvtColor(cls_colored, cv2.COLOR_RGBA2RGB)
             # Blend the colored class attention map with the image
-            img[y:y+h, x:x+w] = cv2.addWeighted(img[y:y+h, x:x+w] , 0.55, cls_colored, 0.45, 0)
+            img[y_plot:y_plot+max_length, x_plot:x_plot+max_length] = cv2.addWeighted(
+                img[y_plot:y_plot+max_length, x_plot:x_plot+max_length] , 0.55, cls_colored, 0.45, 0)
             
         # First set the thickness of the bbox
         bbox_thickness = int(round(max_img_size / 500))

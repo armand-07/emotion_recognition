@@ -101,7 +101,7 @@ def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_mode
                 cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu')
             else:
                 cls_weight = None
-            frame = plot_bbox_emot(frame, faces_bbox, labels, ids, cls_weight, bbox_format ="xywh", display = False)
+            frame = plot_bbox_emot(frame, faces_bbox, labels, ids, cls_weight, bbox_format ="xywh-center", display = False)
             # Display the mean sentiment of the people in the frame
             if params['show_mean_emotion_distrib']:
                 frame, fig, ax, distribution_container = plot_mean_emotion_distribution(frame, processed_preds, fig, ax, distribution_container)
@@ -162,7 +162,7 @@ def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, nam
                     cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu') 
                 else:
                     cls_weight = None
-                frame = plot_bbox_emot(frame, faces_bbox, labels, ids, cls_weight, bbox_format ="xywh", display = False)
+                frame = plot_bbox_emot(frame, faces_bbox, labels, ids, cls_weight, bbox_format ="xywh-center", display = False)
                 # Display the mean sentiment of the people in the frame
                 if params['show_mean_emotion_distrib']:
                     frame, fig, ax, distribution_container = plot_mean_emotion_distribution(frame, processed_preds, fig, ax, distribution_container)
