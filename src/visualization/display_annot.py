@@ -40,7 +40,7 @@ def create_figure_mean_emotion_distribution(height:int, width:int) -> Tuple[plt.
 
 
 def plot_mean_emotion_distribution(img:np.array, output_preds: torch.Tensor, fig:plt.figure, 
-                                   ax:plt.axis, distribution_container:plt.bar = None, BGR_format:bool = False)-> Tuple[np.array, plt.figure, plt.axis, plt.bar]:
+                                   ax:plt.axis, distribution_container:plt.bar = None)-> Tuple[np.array, plt.figure, plt.axis, plt.bar]:
     """ Plots the mean emotion distribution on the image. The distribution_container is used to update the data of the plot.
     Params:
         - img (np.array): image as a numpy array
@@ -48,7 +48,6 @@ def plot_mean_emotion_distribution(img:np.array, output_preds: torch.Tensor, fig
         - fig (plt.figure): figure object
         - ax (plt.axis): axis object
         - distribution_container (plt.bar): container for the distribution plot
-        - BGR_format (bool): if True, the image is in BGR format
     Returns:
         - img (np.array): image with the mean emotion distribution plot
         - fig (plt.figure): updated figure object
@@ -84,8 +83,6 @@ def plot_mean_emotion_distribution(img:np.array, output_preds: torch.Tensor, fig
     canvas = FigureCanvas(fig)
     canvas.draw()
     img_distrib = np.frombuffer(canvas.tostring_rgb(), dtype='uint8').reshape(canvas.get_width_height()[::-1] + (3,))
-    if not BGR_format:
-        img_distrib = cv2.cvtColor(img_distrib, cv2.COLOR_RGB2BGR)
 
     # Put the distribution plot on the image
     height_distrib, width_distrib, _ = img_distrib.shape 
@@ -135,11 +132,8 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
             cls_resized_np = (cls_resized - cls_resized.min()) / (cls_resized.max() - cls_resized.min())
             # Apply the magma color map
             cls_colored = cm(cls_resized_np, bytes=True)
-            # The resulting cls_colored is an RGBA image. If you need a 3-channel RGB image, you can remove the alpha channel:
-            if not BGR_format:
-                cls_colored = cv2.cvtColor(cls_colored, cv2.COLOR_RGBA2BGR)
-            else:
-                cls_colored = cv2.cvtColor(cls_colored, cv2.COLOR_RGBA2RGB)
+            # Return to RGB format
+            cls_colored = cv2.cvtColor(cls_colored, cv2.COLOR_RGBA2RGB)
             # Blend the colored class attention map with the image
             img[y:y+h, x:x+w] = cv2.addWeighted(img[y:y+h, x:x+w] , 0.55, cls_colored, 0.45, 0)
             

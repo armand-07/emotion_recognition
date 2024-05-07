@@ -1,7 +1,6 @@
 import argparse
 import os
 import time
-import wandb
 from tqdm import tqdm
 from typing import Tuple
 from pathlib import Path
@@ -9,10 +8,8 @@ import yaml
 
 import cv2
 import torch
-import numpy as np
 import albumentations
 import ultralytics
-import matplotlib.pyplot as plt
 
 from src import INFERENCE_DIR, NUMBER_OF_EMOT
 import src.models.architectures_video as arch_v
@@ -52,6 +49,7 @@ def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_mode
     while (cap.isOpened()):
         ret, frame = cap.read()
         if ret == True:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) # Convert the frame to RGB
             faces_bbox, labels, ids, processed_preds, people_detected = arch_v.get_pred_from_frame(frame, face_model, emotion_model, device, face_transforms, people_detected, params)
             if params['view_emotion_model_attention']:
                 cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu')
@@ -61,6 +59,7 @@ def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_mode
             # Display the mean sentiment of the people in the frame
             if params['show_mean_emotion_distrib']:
                 frame, fig, ax, distribution_container = plot_mean_emotion_distribution(frame, processed_preds, fig, ax, distribution_container)
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) # Convert the frame to standard BGR before printing
             cv2.imshow('Streaming inference', frame)
             if cv2.waitKey(25) & 0xFF == ord('q'): # Press Q on keyboard to exit
                 break
@@ -108,6 +107,7 @@ def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, nam
         # Capture frame-by-frame
         ret, frame = cap.read()     # ret is a boolean that returns True if the frame is available. frame is the image array.
         if ret == True:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             faces_bbox, labels, ids, processed_preds, people_detected = arch_v.get_pred_from_frame(frame, face_model, emotion_model, device, 
                                                                                                 face_transforms, people_detected, params)
             
@@ -120,6 +120,7 @@ def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, nam
                 # Display the mean sentiment of the people in the frame
                 if params['show_mean_emotion_distrib']:
                     frame, fig, ax, distribution_container = plot_mean_emotion_distribution(frame, processed_preds, fig, ax, distribution_container)
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) # Convert the frame to standard BGR before printing or saving
                 if params['show_inference']:
                     cv2.imshow(name, frame)
                     cv2.waitKey(1)      # Wait 1ms to be able to see properly the results
