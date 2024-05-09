@@ -123,7 +123,11 @@ def load_video_models(wandb_id:str, face_detector_size:str = "medium", view_emot
     wandb.login(key=wandbAPIkey)
     api = wandb.Api()
     artifact_dir = arch.get_wandb_artifact(wandb_id, api = api)
-    local_artifact = torch.load(os.path.join(artifact_dir, "model_best.pt"))
+    if torch.cuda.is_available():
+        map_location = None
+    else:
+        map_location = torch.device('cpu')
+    local_artifact = torch.load(os.path.join(artifact_dir, "model_best.pt"), map_location=map_location)
     params = local_artifact["params"]
     distilled_model = params['distillation']
     if cpu_device:

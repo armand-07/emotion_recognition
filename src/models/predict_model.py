@@ -295,7 +295,7 @@ def main(mode: str, input_path: str, output_dir:str, cpu:bool) -> None:
     params['job_type'] = "test"
 
     face_model, emotion_model, distilled_model, face_transforms, device = arch_v.load_video_models(params['wandb_id_emotion_model'], params['face_detector_size'], 
-                                                                                                   params['view_emotion_model_attention'])
+                                                                                                   params['view_emotion_model_attention'], cpu)
     params['distilled_model'] = distilled_model
     # Start with inference
     if mode == 'stream':
@@ -334,7 +334,7 @@ def parse_args():
     parser.add_argument('--mode', type=str, default='save', help='Process to stream results from camera, or make inference to saved img or video')
     parser.add_argument('--input_path', type=str, default = 'test', help= 'The file to be used for the inference. If mode is cam, it is ignored. If mode is video or img, it is the path to the archive.')
     parser.add_argument('--output_dir', type=str, default = os.path.join(INFERENCE_DIR, 'output'), help= 'Directory to save results')
-    parser.add_argument('--cpu', type=bool, default = False, help= 'Perform all the inference on CPU on non GPU hardware')
+    parser.add_argument('--cpu', action=argparse.BooleanOptionalAction, help= 'Perform all the inference on CPU on non GPU hardware')
     return parser.parse_args()
 
 
