@@ -19,6 +19,17 @@ from config import wandbAPIkey
 
 
 
+def inference_video (annotations):
+    
+    
+        
+
+
+
+
+
+
+
 def main(wandb_id:str = None) -> None:
     """ Main function to evaluate the model. If a wandb_id is provided, the model weights are downloaded from 
     the Weights and Biases server. If not, the parameters are read from the params.yaml file. The model is then

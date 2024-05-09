@@ -15,6 +15,8 @@ RAW_AFFECTNET_DIR =  os.path.join(AFFECTNET_DIR, "raw")
 INTERIM_AFFECTNET_DIR = os.path.join(AFFECTNET_DIR, "interim")
 PROCESSED_AFFECTNET_DIR = os.path.join(AFFECTNET_DIR, "processed")
 
+VIDEO_DIR =  os.path.join(AFFECTNET_DIR, "test_videos")
+
 # Define the corresponding categorical emotions of AffectNet
 # 0: Neutral, 1: Happy, 2: Sad, 3: Surprise, 4: Fear, 5: Disgust, 6: Anger, 7: Contempt
 AFFECTNET_CAT_EMOT = ["Neutral", "Happy", "Sad", "Surprise", "Fear", "Disgust", "Anger", "Contempt"] 
