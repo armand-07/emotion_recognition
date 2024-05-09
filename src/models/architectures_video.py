@@ -107,7 +107,7 @@ def load_YOLO_model_face_recognition(device:torch.device, size:str = "medium",  
 
 
 
-def load_video_models(wandb_id:str, face_detector_size:str = "medium", view_emotion_model_attention = False) -> Tuple[
+def load_video_models(wandb_id:str, face_detector_size:str = "medium", view_emotion_model_attention = False, cpu_device = False) -> Tuple[
     ultralytics.YOLO, torch.nn.Module, albumentations.Compose, torch.device]:
     """Function to load the models and the face detector.
     Args:
@@ -126,7 +126,11 @@ def load_video_models(wandb_id:str, face_detector_size:str = "medium", view_emot
     local_artifact = torch.load(os.path.join(artifact_dir, "model_best.pt"))
     params = local_artifact["params"]
     distilled_model = params['distillation']
-    emotion_model, device = arch.model_creation(params['arch'], local_artifact['state_dict'])
+    if cpu_device:
+        device = torch.device('cpu')
+        emotion_model, _ = arch.model_creation(params['arch'], local_artifact['state_dict'], device)
+    else:
+        emotion_model, device = arch.model_creation(params['arch'], local_artifact['state_dict'])
     emotion_model.eval()
     # Load the face transforms
     face_transforms = data_transforms(only_normalize = True, image_norm = params['image_norm'], resize = True)

@@ -271,12 +271,13 @@ def process_file(input_path:str, output_dir:str, face_model: ultralytics.YOLO, e
 
 
 
-def main(mode: str, input_path: str, output_dir:str) -> None:
+def main(mode: str, input_path: str, output_dir:str, cpu:bool) -> None:
     """Main function to run the inference of the model. It can make streaming inference, on a set of files or only a file.
     Args:
         - mode (str): The mode to be used for the inference.
         - input_path (str): The input file to be used for the inference.
         - output_dir (str): The directory to save the results.
+        - cpu (bool): Perform inference on CPU
     Returns:
         - None
     """
@@ -333,10 +334,11 @@ def parse_args():
     parser.add_argument('--mode', type=str, default='save', help='Process to stream results from camera, or make inference to saved img or video')
     parser.add_argument('--input_path', type=str, default = 'test', help= 'The file to be used for the inference. If mode is cam, it is ignored. If mode is video or img, it is the path to the archive.')
     parser.add_argument('--output_dir', type=str, default = os.path.join(INFERENCE_DIR, 'output'), help= 'Directory to save results')
+    parser.add_argument('--cpu', type=bool, default = False, help= 'Perform all the inference on CPU on non GPU hardware')
     return parser.parse_args()
 
 
 
 if __name__ == '__main__':
     args = parse_args()
-    main(args.mode, args.input_path, args.output_dir)
+    main(args.mode, args.input_path, args.output_dir, args.cpu)
