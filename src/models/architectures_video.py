@@ -44,7 +44,7 @@ def load_HOG_SVM_cascade_face_detection():
 
 def download_YOLO_model_face_recognition(size:str = "medium", directory:str = FACE_DETECT_DIR) -> None:
     """ Downloads the pretrained model for the YOLO depending on specified size. The author of the 
-    weights can be found in https://github.com/akanametov/yolov8-face 
+    weights can be found in: https://github.com/akanametov/yolov8-face 
     Params:
         - size(str): Size of the model to download. Possible values: nano, medium, large
         - directory(str): Directory to save the downloaded model
@@ -74,7 +74,9 @@ def download_YOLO_model_face_recognition(size:str = "medium", directory:str = FA
 
 def load_YOLO_model_face_recognition(device:torch.device, size:str = "medium",  directory:str = FACE_DETECT_DIR) -> ultralytics.YOLO:
     """ Loads the pretrained model for the YOLO depending on specified size. If the model is not found 
-    it will be downloaded on the specified directory. The author of the weights can be found in 
+    it will be downloaded on the specified directory. The author of the weights can be found in:
+    https://github.com/akanametov/yolov8-face. If tracking is enabled during inference, the model needs 
+    to be reloaded when the inference is done in different videos. 
     Params:
         - device (torch.device): Device to use for the model
         - size(str): Size of the model to download. Possible values: nano, medium, large
@@ -107,12 +109,14 @@ def load_YOLO_model_face_recognition(device:torch.device, size:str = "medium",  
 
 
 
-def load_video_models(wandb_id:str, face_detector_size:str = "medium", view_emotion_model_attention = False, cpu_device = False) -> Tuple[
-    ultralytics.YOLO, torch.nn.Module, albumentations.Compose, torch.device]:
+def load_video_models(wandb_id:str, face_detector_size:str = "medium", view_emotion_model_attention:bool = False, 
+                      cpu_device:bool = False) -> Tuple[ultralytics.YOLO, torch.nn.Module, albumentations.Compose, torch.device]:
     """Function to load the models and the face detector.
-    Args:
+    Params:
         - wandb_id (str): The id of the wandb run to be used.
         - face_detector_size (str): The size of the face detector model to be used.
+        - view_emotion_model_attention (bool): If True, it will save the attention maps of the emotion model when forwarding the images.
+        - cpu_device (bool): If True, it will use only the CPU device.
     Returns:
         - face_model (ultralytics.YOLO): The face detector model.
         - emotion_model (torch.nn.Module): The emotion model.
@@ -257,10 +261,10 @@ def track_faces_YOLO(img:np.array, pretrained_model:ultralytics.YOLO, format:str
     # Get confidence of detection and id of bbox
     conf = results[0].boxes.conf.cpu()
     bbox_ids = results[0].boxes.id
-    if bbox_ids is None and conf.shape[0] != 0: # If no face is found it returns None
-        bbox_ids =  torch.full((conf.shape[0],), -1) # If no tracking id, it returns -1
+    if bbox_ids is None and conf.shape[0] != 0: # If no tracking id, it returns -1
+        bbox_ids =  torch.full((conf.shape[0],), -1) 
         print('Detections without tracking id, setting unknown')
-    elif bbox_ids is None and conf.shape[0] == 0: # If no face is found it returns None
+    elif bbox_ids is None and conf.shape[0] == 0: # If no face is found it returns an empty tensor
         bbox_ids = torch.empty(0, dtype=torch.int)
         print('No detections found')
     else:
@@ -281,6 +285,23 @@ def track_faces_YOLO(img:np.array, pretrained_model:ultralytics.YOLO, format:str
     boxes = boxes.type(torch.int).cpu()
         
     return boxes, bbox_ids, conf
+
+
+def bbox_xywh2xyxy(bbox:torch.Tensor) -> torch.Tensor:
+    """Converts the bbox from [x, y, w, h] format to [x1, y1, x2, y2] format.
+    Params:
+        - bbox (torch.Tensor): Bounding boxes in the format [x, y, w, h]. Expects the coordinates of the top-left corner 
+            and its width and height. The shape is [n, 4], where n is the number of bboxes.
+    Returns:
+        - bbox (torch.Tensor): Bounding boxes in the format [x1, y1, x2, y2]. The shape is [n, 4], where n is the number of bboxes.
+    """
+    if bbox.shape[0] == 0:
+        print("Empty bbox given")
+        return bbox
+    
+    bbox[:, 2] = bbox[:, 0] + bbox[:, 2]
+    bbox[:, 3] = bbox[:, 1] + bbox[:, 3]
+    return bbox
 
 
 
@@ -354,6 +375,54 @@ def get_raw_pred_from_frame(img:np.array, face_model:ultralytics.YOLO, emotion_m
         raw_preds = torch.empty(0).to(device)
     
     return filtered_faces_bbox, raw_preds, filtered_ids
+
+
+def get_raw_pred_from_frame_no_threshold(img:np.array, face_model:ultralytics.YOLO, emotion_model:torch.nn.Module, distilled_model:bool,
+                distilled_embedding_method:str, device: torch.device, face_transforms:albumentations.Compose, tracking:bool = False
+                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Function to infer an image or frame using the given emotion model, face detector and hyperparameters. It returns 
+    the faces detected with the bbox represented in x,y top-left corner format, the predictions of the model (logits), the ids of the faces
+    and the confidence of face predictions (all above 0.01 of confidence). No postprocessing or prediction normalization is done in this function.
+    Args:
+        - img (np.array): The image to be inferred.
+        - face_model (YOLO): The face detector model.
+        - emotion_model (torch.nn.Module): The emotion model.
+        - distilled_model (bool): If True, it is a distilled model. 
+        - distilled_embedding_method (str): The method to obtain the output embeddings for distilled models. 
+        It can be 'class', 'distill' or 'both'.
+        - device (torch.device): The device to be used.
+        - face_transforms (albumentations.Compose): The face transforms.
+        - tracking (bool): If True, it will track the faces.
+        - first_frame (bool): If True, it is the first frame of the video. It is only used for tracking
+    Returns:
+        - Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: The faces detected, the predictions of the model 
+            (logits), the ids of the faces and the confidence of predictions
+    """
+    if tracking:
+        [faces_bbox, bbox_ids, confidence_YOLO] = track_faces_YOLO(img, face_model, device = device, format = 'xywh-center')
+    else:
+        [faces_bbox, confidence_YOLO] = detect_faces_YOLO(img, face_model, format = 'xywh-center')
+        bbox_ids = torch.arange(len(faces_bbox), dtype=torch.int)
+
+    filtered_faces_bbox = faces_bbox[confidence_YOLO > 0.01]
+    filtered_ids = bbox_ids[confidence_YOLO > 0.01]
+    filtered_confidence = confidence_YOLO[confidence_YOLO > 0.01]
+
+    
+    if len(filtered_faces_bbox) != 0:
+        img_height, img_width, _ = img.shape
+        squared_bbox = transform_bbox_to_square(filtered_faces_bbox, img_width, img_height)
+        face_batch = create_faces_batch(img, face_transforms, squared_bbox, device)
+        with torch.no_grad():
+            face_batch.to(device)
+            if distilled_model:
+                raw_preds = arch.get_pred_distilled_model(emotion_model, face_batch, distilled_embedding_method)
+            else:
+                raw_preds = emotion_model(face_batch) # Predict emotions returns a tensor with logits
+    else: # If no faces are detected, return empty tensors
+        raw_preds = torch.empty(0).to(device)
+    
+    return filtered_faces_bbox, raw_preds, filtered_ids, filtered_confidence
 
 
 

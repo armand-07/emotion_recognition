@@ -364,3 +364,44 @@ def save_val_wandb_metrics_dist(acc1:torcheval.metrics, acc2:torcheval.metrics, 
             "Area Under the (ROC AUC) Curve OvR": roc_auc_ovr}
     
     return metrics
+
+
+
+def save_video_test_wandb_metrics(sum_IoU:float , global_sum_loss:float, total_GTs:float, total_detections:float,
+                                    total_inference_time:float, total_inference_time_people:float, total_frames:int,
+                                    GT_labels:torch.Tensor, preds_labels:torch.Tensor,
+                                    acc1:torcheval.metrics, acc2:torcheval.metrics, run: wandb.run) -> dict:
+    """Save the validation metrics in Weights and Biases for the model when distillilation is applied.
+    Params:
+        
+    """
+    # Compute the metrics
+    mean_IoU = sum_IoU / total_GTs
+    global_mean_loss = global_sum_loss / total_detections
+    inference_time = total_inference_time / total_frames
+    inference_time_people = total_inference_time_people / total_detections
+
+    acc1 = acc1.compute().item()
+    acc2 = acc2.compute().item()
+
+    f1_score = multiclass_f1_score(input=preds_labels, target=GT_labels, num_classes=NUMBER_OF_EMOT, average = 'macro').item() # F1-Score
+    chart_precision_recall = compute_multiclass_precision_recall(GT_labels, preds_labels)
+    chart_f1_score = compute_multiclass_f1_score(GT_labels, preds_labels)
+
+    # Log the confusion matrix
+    conf_matrix = confusion_matrix(GT_labels.numpy(), preds_labels.numpy(), normalize = 'true')
+    chart_conf_matrix = vis.create_conf_matrix(conf_matrix)
+
+
+    run.log({"Mean IoU above IoU threshold": mean_IoU,
+            "Global Mean Loss": global_mean_loss,
+            "Total detections": total_detections,
+            "Inferece time per frame": inference_time,
+            "Inference time per person and frame": inference_time_people,
+            "Accuracy": acc1,
+            "Top-2 accuracy": acc2,
+            "F1-Score": f1_score,
+            "Plot Precision and Recall by class": wandb.Image(chart_precision_recall),
+            "Plot F1-Score by class": wandb.Image(chart_f1_score),
+            "Confusion Matrix": chart_conf_matrix
+            }, commit=True)

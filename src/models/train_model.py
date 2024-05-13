@@ -468,6 +468,9 @@ def model_training(params = None):
     artifact.add_file(os.path.join(saving_path, 'emissions.csv'))
     run.log_artifact(artifact)
     run.finish()
+    
+    # Delete every local archive to avoid filling the disk with many trainings
+    shutil.rmtree(saving_path)
 
 
 
