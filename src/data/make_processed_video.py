@@ -54,8 +54,8 @@ def generate_data(input_dir:str) -> pd.DataFrame:
     # Create new dataframe grouping by archive and frame number to have all the bboxes and labels joined
     df = pd.DataFrame(data, columns=['filename', 'frame', 'label', 'bbox'])
     df_grouped = df.groupby(['filename', 'frame']).apply(lambda g: pd.DataFrame({
-    'bboxes': [torch.Tensor(np.vstack(g['bbox'].values))],
-    'labels': [torch.Tensor(g['label'].values)]}
+    'bboxes': [torch.Tensor(np.vstack(g['bbox'].values)).int()],
+    'labels': [torch.Tensor(g['label'].values).long()]} # Convert to tensor to long to use it later on criterion
     )).reset_index()
     # Delete the columns used for the last operation
     df_grouped = df_grouped.drop(columns=['level_2'])

@@ -31,12 +31,16 @@ def visualize_batch(img, cat_label = None, col = 8, adjust_to_vis_range = False)
     plt.show()
 
 
-def create_conf_matrix(conf_matrix):
+def create_conf_matrix(conf_matrix, unique_labels = None):
     """Create a confusion matrix using the plotly library."""
+    if unique_labels is not None:
+        labels = unique_labels
+    else:
+        labels = AFFECTNET_CAT_EMOT
     fig = px.imshow(conf_matrix,
                 labels=dict(y="True Emotion", x="Predicted Emotion", color="Percentage"),
-                x=AFFECTNET_CAT_EMOT,
-                y=AFFECTNET_CAT_EMOT,
+                x=labels,
+                y=labels,
                 color_continuous_scale='Blues',
                 zmin = 0.0,
                 zmax = 1.0,

@@ -53,7 +53,7 @@ inference:
   show_mean_emotion_distrib: False
   save_result: True
   show_inference: False
-  view_emotion_model_attention: True
+  view_emotion_model_attention: False
 
 
 test_video:

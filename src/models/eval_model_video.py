@@ -13,9 +13,7 @@ import torchvision
 import cv2
 import ultralytics
 import albumentations
-
 import wandb
-
 
 from src import TEST_VIDEO_DIR, NUMBER_OF_EMOT
 from src.models import architectures as arch
@@ -38,71 +36,72 @@ def eval_video(annotations:str, cap:cv2.VideoCapture, name: str, face_model: ult
     total_detections = 0 # should be less than GT_people
     sum_inference_time = 0.0
     sum_inference_time_people = 0.0
-    all_GT_labels = torch.empty(0, device = 'cpu')
-    all_preds_labels = torch.empty(0, device = 'cpu')
+    all_GT_labels = torch.empty(0, device = 'cpu', dtype = torch.long)
+    all_preds_labels = torch.empty(0, device = 'cpu', dtype = torch.long)
     
     IoU_threshold = float(params['IoU_threshold'])
     
-
     if params['tracking']:
         people_detected = dict()
         people_detected[-1] = [torch.ones(NUMBER_OF_EMOT).to(device)] # If no tracking id, it returns a uniform distribution
     else:
         people_detected = None
-
     # Iterate over each frame of the video
-    for frame_id in range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))):
+    for frame_id in tqdm(range(annotations.shape[0])): # All the frames in the video have a row in the df annotations, even if no bbox is present
         # Capture video frame-by-frame
         ret, frame = cap.read()
-        GT_bboxes = annotations.iloc[frame_id - 1]['bboxes']
-        GT_labels = annotations.iloc[frame_id - 1]['labels']
-        print(GT_bboxes, GT_labels)
-        if ret == True and (GT_labels.item() != -1): # If the frame has not ended and has a bbox assigned to the frame
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            # Get the predictions from the frame
-            start = time.time()
-            faces_bbox, labels, ids, processed_preds, people_detected = arch_v.get_pred_from_frame(frame, face_model, emotion_model, device, 
-                                                                                                face_transforms, people_detected, params)
-            end = time.time()
+        GT_bboxes = annotations.iloc[frame_id]['bboxes']
+        GT_labels = annotations.iloc[frame_id]['labels']
+        if ret == True: # If the frame has not ended
+            if GT_labels[0].item() != -1: # Check if it has a GT bbox assigned to the frame
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                # Get the predictions from the frame
+                start = time.time()
+                faces_bbox, labels, ids, processed_preds, people_detected = arch_v.get_pred_from_frame(frame, face_model, emotion_model, device, 
+                                                                                                    face_transforms, people_detected, params)
+                end = time.time()
 
-            # Update metrics
-            sum_inference_time += end - start
-            total_GTs += GT_labels.size(0)
-            print(len(ids), ids)
-            print(faces_bbox, GT_bboxes, processed_preds, GT_labels)
-            if len(ids) > 0: # If there are people detected
-                sum_inference_time_people += sum_inference_time / len(ids) # Divide the inference time by the number of people detected
-                faces_bbox = arch_v.bbox_xywh2xyxy(faces_bbox) # Convert the bbox from xywh to xyxy to compute IoU
-                max_iou, bbox_idx = torch.max(torchvision.ops.box_iou(GT_bboxes, faces_bbox), dim = 1) # Get the max iou per each GT bbox
-                
-                # Get the IoU values above the threshold per each GT bbox and sum the max IoU values
-                filtered_max_iou = max_iou[max_iou > IoU_threshold] # Filter out the IoU values below the threshold
-                sum_max_IoU += sum_max_IoU + torch.sum(filtered_max_iou).item()
+                # Update metrics
+                sum_inference_time += end - start
+                total_GTs += GT_labels.size(0) # Update the total number of total GT available in frame
+                if len(ids) > 0: # If there are people detected
+                    sum_inference_time_people += (end - start) / len(ids) # Divide the inference time by the number of people detected
+                    faces_bbox = arch_v.bbox_xywh_center2xyxy(faces_bbox) # Convert the bbox from xywh to xyxy to compute IoU
+                    max_iou, bbox_idx_max_iou = torch.max(torchvision.ops.box_iou(GT_bboxes, faces_bbox), dim = 1) # Get the max iou per each GT bbox
+                    
+                    # Filter out the predictions with IoU values below the IoU threshold
+                    filter_IoU = max_iou > IoU_threshold
+                    filtered_max_iou = max_iou[filter_IoU]; bbox_idx_max_iou = bbox_idx_max_iou[filter_IoU]
+                    GT_labels = GT_labels[filter_IoU]
 
-                # Get the indexes with IoU above the threshold
-                bbox_idx = bbox_idx[max_iou > IoU_threshold]; GT_labels = GT_labels[bbox_idx]
-                ids = ids[bbox_idx]
+                    # Measure face detector performance
+                    sum_max_IoU += torch.sum(filtered_max_iou).item()
 
-                # Get the labels of the GT bboxes with IoU above the threshold
-                total_detections += GT_labels.size(0)
-                processed_preds = arch.get_distributions(processed_preds) # Get the distributions of the predictions
-                processed_preds = processed_preds[bbox_idx] # Get the processed predictions of the GT bboxes with IoU above the threshold
-                
-                # Compute loss
-                total_loss += criterion(processed_preds, GT_labels).item()
-                # Compute the accuracy
-                acc1.update(processed_preds, GT_labels)
-                acc2.update(processed_preds, GT_labels)
-                # Concatenate the labels
-                all_GT_labels = torch.cat((all_GT_labels, GT_labels), dim = 0)
-                all_preds_labels = torch.cat((all_preds_labels, torch.argmax(processed_preds, dim = 1)), dim = 0)
-            else: # If no detection is found (id and bbox list empty), penalize only the face detector
-                sum_inference_time_people += sum_inference_time
-
+                    # Filter out the GT labels with the label 8 (unknown)
+                    label_filter = GT_labels != 8 # 
+                    GT_labels = GT_labels[label_filter]; bbox_idx_max_iou = bbox_idx_max_iou[label_filter]
+                    
+                    detections = GT_labels.size(0)
+                    total_detections += detections
+                    if detections > 0: # If there are GT labels after the filters evaluate the emotion model (face detected above the threshold and GT label is valid)
+                        processed_preds = processed_preds[bbox_idx_max_iou] # Get the processed predictions of the GT bboxes with IoU above the threshold
+                        processed_preds = arch.get_distributions(processed_preds) # Get the distributions of the predictions
+                        # Compute loss
+                        total_loss += criterion(processed_preds, GT_labels).item()
+                        # Compute the accuracy
+                        acc1.update(processed_preds, GT_labels)
+                        acc2.update(processed_preds, GT_labels)
+                        # Concatenate the labels
+                        all_GT_labels = torch.cat((all_GT_labels, GT_labels), dim = 0)
+                        all_preds_labels = torch.cat((all_preds_labels, torch.argmax(processed_preds, dim = 1).long()), dim = 0)
+                else: # If no detection is found (id and bbox list empty), penalize only the face detector increasing total of GT detected and no IoU
+                    sum_inference_time_people += end - start
         else: # Break the loop if video has ended
             break
 
-    return sum_max_IoU, total_loss, total_GTs, total_detections, sum_inference_time, sum_inference_time_people, all_GT_labels, all_preds_labels, acc1, acc2
+    return [sum_max_IoU, total_loss, total_GTs, total_detections, 
+            sum_inference_time, sum_inference_time_people, 
+            all_GT_labels, all_preds_labels, acc1, acc2]
 
 
 
@@ -131,12 +130,11 @@ def eval_model_on_videos(annotations_path:str, video_dir:str, params:dict, run: 
     total_inference_time = 0.0
     total_inference_time_people = 0.0
     total_frames = 0
-    all_GT_labels = torch.empty(0, device = 'cpu')
-    all_preds_labels = torch.empty(0, device = 'cpu')
+    all_GT_labels = torch.empty(0, device = 'cpu', dtype = torch.long)
+    all_preds_labels = torch.empty(0, device = 'cpu', dtype = torch.long)
     acc1 = MulticlassAccuracy(device=device)
     acc2 = MulticlassAccuracy(device=device, k = 2)
-    criterion = arch.define_criterion(params)
-    
+    criterion = torch.nn.CrossEntropyLoss(reduction = 'sum')
     
     # List all files in the video directory and obtain the annotations
     video_files = os.listdir(video_dir)
@@ -150,16 +148,18 @@ def eval_model_on_videos(annotations_path:str, video_dir:str, params:dict, run: 
             print(f'Skipping video {video_filename} because no annotation was found in the processed annotations')
             continue
         else: # Analize the video
+            print(f'Analizing video {video_filename}')
             if params['tracking'] and not first_execution: # If tracking is enabled, it needs to restart the tracking by realoading the face model
                     face_model = arch_v.load_YOLO_model_face_recognition(size = params['face_detector_size'], device = device)
-            df_video = df_annotations[df_annotations['filename'] == video_filename].reset_index()
+            df_video = df_annotations[df_annotations['filename'] == video_filename].set_index('frame')
+            total_frames += df_video.shape[0] # Update the total number of frames based on the number of frames annotated in the video
+
             cap = cv2.VideoCapture(os.path.join(video_dir, video_file))
-            total_frames += int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
             [sum_IoU_video, sum_loss_video, video_GTs, video_detections, 
-             inference_time_video, inference_time_people_video, GT_labels_video, 
-             preds_labels_video, acc1, acc2] = eval_video(df_video, cap, video_filename, face_model, emotion_model, 
-                                                          device, face_transforms, params, criterion, acc1, acc2)
+             inference_time_video, inference_time_people_video,
+             GT_labels_video, preds_labels_video, acc1, acc2] = eval_video(df_video, cap, video_filename, face_model, emotion_model, 
+                                                                            device, face_transforms, params, criterion, acc1, acc2)
             first_execution = False # Set to False after the first execution to reload the face model on the next iteration
             
             # Update metrics
@@ -208,7 +208,7 @@ def main(wandb_id:str = None) -> None:
         with open(params_path, "r", encoding='utf-8') as params_file:
             try:
                 params = yaml.safe_load(params_file)
-                params = params["eval"]
+                params = params["test_video"]
             except yaml.YAMLError as exc:
                 print(exc)
     else: # If a wandb_id is provided, download the model weights
@@ -234,7 +234,7 @@ def main(wandb_id:str = None) -> None:
     # Evaluate the model on the test video set
     eval_model_on_videos (annotations_path, video_dir, params, run)
     
-    #wandb.finish()
+    wandb.finish()
 
 
 def parse_args():

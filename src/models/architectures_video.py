@@ -305,6 +305,27 @@ def bbox_xywh2xyxy(bbox:torch.Tensor) -> torch.Tensor:
 
 
 
+def bbox_xywh_center2xyxy(bbox:torch.Tensor) -> torch.Tensor:
+    """Converts the bbox from [x, y, w, h] format where x,y represent the center, to [x1, y1, x2, y2] format.
+    Params:
+        - bbox (torch.Tensor): Bounding boxes in the format [x, y, w, h]. Expects the coordinates of the center 
+            and its width and height (from top, left). The shape is [n, 4], where n is the number of bboxes.
+    Returns:
+        - bbox (torch.Tensor): Bounding boxes in the format [x1, y1, x2, y2] (left up point, right down point). 
+        The shape is [n, 4], where n is the number of bboxes.
+    """
+    if bbox.shape[0] == 0:
+        print("Empty bbox given")
+        return bbox
+    
+    bbox[:, 0] = bbox[:, 0] - bbox[:, 2]/2
+    bbox[:, 1] = bbox[:, 1] - bbox[:, 3]/2
+    bbox[:, 2] = bbox[:, 0] + bbox[:, 2]
+    bbox[:, 3] = bbox[:, 1] + bbox[:, 3]
+    return bbox
+
+
+
 def create_faces_batch(img:np.array, face_transforms:albumentations.Compose, 
                        face_bboxes:torch.Tensor, device:torch.device) -> torch.Tensor:
     """Create a batch of face images from the original image and a tensor of bounding boxes. 
@@ -334,7 +355,7 @@ def get_raw_pred_from_frame(img:np.array, face_model:ultralytics.YOLO, emotion_m
                 distilled_embedding_method:str, device: torch.device, face_transforms:albumentations.Compose, 
                 face_threshold:float = 0.65, tracking:bool = False) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Function to infer an image or frame using the given emotion model, face detector and hyperparameters. It returns 
-    the faces detected with the bbox represented in x,y top-left corner format, the predictions of the model (logits) 
+    the faces detected with the bbox represented in xywh-center format, the predictions of the model (logits) 
     and the ids of the faces. No postprocessing or prediction normalization is done in this function.
     Args:
         - img (np.array): The image to be inferred.
@@ -349,7 +370,7 @@ def get_raw_pred_from_frame(img:np.array, face_model:ultralytics.YOLO, emotion_m
         - tracking (bool): If True, it will track the faces.
         - first_frame (bool): If True, it is the first frame of the video. It is only used for tracking
     Returns:
-        - Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: The faces detected, the predictions of the model 
+        - Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: The faces detected in xywh-center format, the predictions of the model 
             (logits) and the ids of the faces.
     """
     if tracking:
@@ -471,7 +492,7 @@ def get_pred_from_frame(frame:np.array, face_model:ultralytics.YOLO, emotion_mod
                          face_transforms:albumentations.Compose, people_detected: dict, params:dict
                          ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict]:
     """Function to get the predictions from a frame using the given models and hyperparameters. It returns the faces detected
-    with the bbox represented in x,y top-left corner format, the labels of the model and the ids of the faces.
+    with the bbox represented in xywh-center, the labels of the model and the ids of the faces.
     Params:
         - frame (np.array): The frame to be inferred.
         - face_model (ultralytics.YOLO): The face detector model.

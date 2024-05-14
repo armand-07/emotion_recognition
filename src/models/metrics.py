@@ -137,15 +137,24 @@ def compute_ROC_AUC_OVR(all_targets:torch.Tensor, all_preds_dist:torch.Tensor, l
 
 
 
-def compute_multiclass_precision_recall(all_targets:torch.Tensor, all_preds_labels:torch.Tensor) -> plt.Figure:
+def compute_multiclass_precision_recall(all_targets:torch.Tensor, all_preds_labels:torch.Tensor, unique_labels: np.array = None) -> plt.Figure:
     """Compute the precision and recall for the model per class and then returns the resulting plot.
     Params:
         - all_targets (torch.Tensor): The tensor with all the targets.
         - all_preds_labels (torch.Tensor): The tensor with all the predictions in label form.
+        - unique_labels (np.array): The array with the unique labels in the data.
     Returns:
         - fig (plt.Figure): The figure with the plots of the precision and recall for each class.
     """
-    report = classification_report(all_targets, all_preds_labels, output_dict=True, target_names=AFFECTNET_CAT_EMOT)
+    # Find unique class labels
+    if unique_labels is None:
+        labels = np.arange(NUMBER_OF_EMOT)
+        target_names = AFFECTNET_CAT_EMOT
+    else:
+        labels = unique_labels
+        target_names = [AFFECTNET_CAT_EMOT[i] for i in unique_labels]
+
+    report = classification_report(all_targets, all_preds_labels, output_dict=True, target_names=target_names, labels=labels)
 
     classes = list(report.keys())[:-3]  # Exclude 'accuracy', 'macro avg', 'weighted avg'
     precision = [report[cls]['precision'] for cls in classes]
@@ -173,28 +182,34 @@ def compute_multiclass_precision_recall(all_targets:torch.Tensor, all_preds_labe
 
 
 
-def compute_multiclass_f1_score(all_targets:torch.Tensor, all_preds_labels:torch.Tensor) -> plt.Figure:
+def compute_multiclass_f1_score(all_targets:torch.Tensor, all_preds_labels:torch.Tensor, unique_labels: np.array = None) -> plt.Figure:
     """Compute the F1 score for each class in a multiclass classification problem. 
     Params:
         - all_targets (torch.Tensor): The tensor with all the targets.
         - all_preds_labels (torch.Tensor): The tensor with all the predictions in label form.
+        - unique_labels (np.array): The array with the unique labels in the data.
     Returns:
         - fig (plt.Figure): The figure with the plot of the F1 score for each class.
     """
-    f1_scores = f1_score(all_targets, all_preds_labels, average=None)
-    x = np.arange(len(AFFECTNET_CAT_EMOT))  # the label locations
+    if unique_labels is None:
+        unique_labels = np.arange(NUMBER_OF_EMOT)
+        names = AFFECTNET_CAT_EMOT
+    else:
+        unique_labels = unique_labels
+        names = [AFFECTNET_CAT_EMOT[i] for i in unique_labels]
+    f1_scores = f1_score(all_targets, all_preds_labels, average=None, labels=unique_labels)
     width = 0.35  # the width of the bars
 
     fig, ax = plt.subplots()
-    ax.bar(x, f1_scores, width, color='mediumseagreen')
+    ax.bar(unique_labels, f1_scores, width, color='mediumseagreen')
 
     # Add some text for labels, title and custom x-axis tick labels, etc.
     ax.set_ylabel('F1 Score')
     ax.set_ylim([0.0, 1.0])
     ax.grid(axis = 'y', linestyle = '--', linewidth = 0.5, color = 'black')
     ax.set_title('F1 Score by class')
-    ax.set_xticks(x)
-    ax.set_xticklabels(AFFECTNET_CAT_EMOT)
+    ax.set_xticks(unique_labels)
+    ax.set_xticklabels(names)
 
     fig.tight_layout()
     return fig
@@ -384,20 +399,23 @@ def save_video_test_wandb_metrics(sum_IoU:float , global_sum_loss:float, total_G
     acc1 = acc1.compute().item()
     acc2 = acc2.compute().item()
 
+    unique_labels = np.unique(np.concatenate((GT_labels, preds_labels))) # Only report on labels that appear in the data
+
     f1_score = multiclass_f1_score(input=preds_labels, target=GT_labels, num_classes=NUMBER_OF_EMOT, average = 'macro').item() # F1-Score
-    chart_precision_recall = compute_multiclass_precision_recall(GT_labels, preds_labels)
-    chart_f1_score = compute_multiclass_f1_score(GT_labels, preds_labels)
+    chart_precision_recall = compute_multiclass_precision_recall(GT_labels, preds_labels, unique_labels)
+    chart_f1_score = compute_multiclass_f1_score(GT_labels, preds_labels, unique_labels)
 
     # Log the confusion matrix
     conf_matrix = confusion_matrix(GT_labels.numpy(), preds_labels.numpy(), normalize = 'true')
-    chart_conf_matrix = vis.create_conf_matrix(conf_matrix)
+    chart_conf_matrix = vis.create_conf_matrix(conf_matrix, unique_labels)
 
 
     run.log({"Mean IoU above IoU threshold": mean_IoU,
             "Global Mean Loss": global_mean_loss,
             "Total detections": total_detections,
-            "Inferece time per frame": inference_time,
+            "Inference time per frame": inference_time,
             "Inference time per person and frame": inference_time_people,
+            "Model throughput (frames per second)": 1/inference_time,
             "Accuracy": acc1,
             "Top-2 accuracy": acc2,
             "F1-Score": f1_score,
