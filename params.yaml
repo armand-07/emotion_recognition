@@ -50,10 +50,10 @@ inference:
   postprocessing: "temporal_average"
   window_size: 3
   distilled_model_out_method: "class" # only used in distilled models
-  show_mean_emotion_distrib: False
+  show_mean_emotion_distrib: True
   save_result: True
   show_inference: False
-  view_emotion_model_attention: False
+  view_emotion_model_attention: True
 
 
 test_video:

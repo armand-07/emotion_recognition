@@ -7,7 +7,10 @@ from pathlib import Path
 import yaml
 
 import cv2
-import pyautogui as pg
+try:
+    import pyautogui as pg
+except: # For the case of running in a server
+    pass
 import torch
 import numpy as np
 import albumentations
