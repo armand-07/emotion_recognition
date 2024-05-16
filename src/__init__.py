@@ -6,8 +6,9 @@ import os
 ROOT_DIR = Path(Path(__file__).resolve().parent.parent)
 MODELS_DIR = os.path.join(ROOT_DIR, "models")
 FACE_DETECT_DIR = os.path.join(MODELS_DIR, "face_recognition")
-RAW_DATA_DIR = os.path.join(ROOT_DIR, "data", "raw")
-INTERIM_DATA_DIR = os.path.join(ROOT_DIR, "data", "interim")
+DATA_DIR = os.path.join(ROOT_DIR, "data")
+RAW_DATA_DIR = os.path.join(DATA_DIR, "raw")
+INTERIM_DATA_DIR = os.path.join(DATA_DIR, "interim")
 INFERENCE_DIR = os.path.join(ROOT_DIR, "inference")
 
 AFFECTNET_DIR = os.path.normpath("/mnt/gpid08/datasets/affectnet/") # substitute with the actual data path
