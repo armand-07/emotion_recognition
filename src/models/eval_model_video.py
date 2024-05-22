@@ -173,12 +173,12 @@ def eval_model_on_videos(annotations_path:str, video_dir:str, params:dict, run: 
 
     print(sum_IoU, global_sum_loss, total_GTs, total_detections, 
                                     total_inference_time, total_inference_time_people, total_frames,
-                                    GT_labels_video, preds_labels_video)
+                                    all_GT_labels, all_preds_labels)
             
     # Compute the metrics
     save_video_test_wandb_metrics(sum_IoU, global_sum_loss, total_GTs, total_detections, 
                                     total_inference_time, total_inference_time_people, total_frames,
-                                    GT_labels_video, preds_labels_video, acc1, acc2, run)
+                                    all_GT_labels, all_preds_labels, acc1, acc2, run)
 
 
 
