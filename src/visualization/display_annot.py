@@ -54,11 +54,14 @@ def plot_mean_emotion_distribution(img:np.array, output_preds: torch.Tensor, fig
         - ax (plt.axis): updated axis object
         - distribution_container (plt.bar): updated container for the distribution plot
     """
-    # Get the emotion distribution for each detection
-    output_distrib = arch.get_distributions(output_preds)
-    # Get mean emotion distribution across all detections
-    mean_distrib = torch.mean(output_distrib, dim = 0)
-    mean_distrib = mean_distrib.cpu().numpy()
+    if output_preds.shape[0] == 0: # If there are no detections, set mean_distrib to zeros
+        mean_distrib = np.zeros(8)
+    else:
+        # Get the emotion distribution for each detection
+        output_distrib = arch.get_distributions(output_preds)
+        # Get mean emotion distribution across all detections
+        mean_distrib = torch.mean(output_distrib, dim = 0)
+        mean_distrib = mean_distrib.cpu().numpy()
 
     # Get the max length of the image
     height, width, _ = img.shape
