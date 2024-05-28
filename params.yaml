@@ -58,10 +58,10 @@ inference:
 
 test_video:
   wandb_id_emotion_model: "sage-sweep-9"
-  face_detector_size: "medium"
-  face_threshold: 0.65
+  face_detector_size: "nano"
+  face_threshold: 0.0
   tracking: True
   postprocessing: "temporal_average"
   window_size: 3
   distilled_model_out_method: "class" # only used in distilled models
-  IoU_threshold: 0.5
+  IoU_threshold: 0.75

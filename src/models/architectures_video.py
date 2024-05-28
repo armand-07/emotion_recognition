@@ -353,7 +353,8 @@ def create_faces_batch(img:np.array, face_transforms:albumentations.Compose,
 
 def get_raw_pred_from_frame(img:np.array, face_model:ultralytics.YOLO, emotion_model:torch.nn.Module, distilled_model:bool,
                 distilled_embedding_method:str, device: torch.device, face_transforms:albumentations.Compose, 
-                face_threshold:float = 0.65, tracking:bool = False) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                face_threshold:float = 0.65, tracking:bool = False, get_object_confidence: bool = False
+                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Function to infer an image or frame using the given emotion model, face detector and hyperparameters. It returns 
     the faces detected with the bbox represented in xywh-center format, the predictions of the model (logits) 
     and the ids of the faces. No postprocessing or prediction normalization is done in this function.
@@ -368,7 +369,7 @@ def get_raw_pred_from_frame(img:np.array, face_model:ultralytics.YOLO, emotion_m
         - face_transforms (albumentations.Compose): The face transforms.
         - face_threshold (float): The threshold to be used for the face detector.
         - tracking (bool): If True, it will track the faces.
-        - first_frame (bool): If True, it is the first frame of the video. It is only used for tracking
+        - get_object_confidence (bool): If True, it returns the confidence of the face detector. If True, it will not filter the faces with 
     Returns:
         - Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: The faces detected in xywh-center format, the predictions of the model 
             (logits) and the ids of the faces.
@@ -378,7 +379,7 @@ def get_raw_pred_from_frame(img:np.array, face_model:ultralytics.YOLO, emotion_m
     else:
         [faces_bbox, confidence_YOLO] = detect_faces_YOLO(img, face_model, format = 'xywh-center')
         bbox_ids = torch.arange(len(faces_bbox), dtype=torch.int)
-
+    
     filtered_faces_bbox = faces_bbox[confidence_YOLO > face_threshold]
     filtered_ids = bbox_ids[confidence_YOLO > face_threshold]
     
@@ -394,72 +395,27 @@ def get_raw_pred_from_frame(img:np.array, face_model:ultralytics.YOLO, emotion_m
                 raw_preds = emotion_model(face_batch) # Predict emotions returns a tensor with logits
     else: # If no faces are detected, return empty tensors
         raw_preds = torch.empty(0).to(device)
-    
-    return filtered_faces_bbox, raw_preds, filtered_ids
 
-
-def get_raw_pred_from_frame_no_threshold(img:np.array, face_model:ultralytics.YOLO, emotion_model:torch.nn.Module, distilled_model:bool,
-                distilled_embedding_method:str, device: torch.device, face_transforms:albumentations.Compose, tracking:bool = False
-                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Function to infer an image or frame using the given emotion model, face detector and hyperparameters. It returns 
-    the faces detected with the bbox represented in x,y top-left corner format, the predictions of the model (logits), the ids of the faces
-    and the confidence of face predictions (all above 0.01 of confidence). No postprocessing or prediction normalization is done in this function.
-    Args:
-        - img (np.array): The image to be inferred.
-        - face_model (YOLO): The face detector model.
-        - emotion_model (torch.nn.Module): The emotion model.
-        - distilled_model (bool): If True, it is a distilled model. 
-        - distilled_embedding_method (str): The method to obtain the output embeddings for distilled models. 
-        It can be 'class', 'distill' or 'both'.
-        - device (torch.device): The device to be used.
-        - face_transforms (albumentations.Compose): The face transforms.
-        - tracking (bool): If True, it will track the faces.
-        - first_frame (bool): If True, it is the first frame of the video. It is only used for tracking
-    Returns:
-        - Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: The faces detected, the predictions of the model 
-            (logits), the ids of the faces and the confidence of predictions
-    """
-    if tracking:
-        [faces_bbox, bbox_ids, confidence_YOLO] = track_faces_YOLO(img, face_model, device = device, format = 'xywh-center')
+    if get_object_confidence:
+        return filtered_faces_bbox, raw_preds, filtered_ids, confidence_YOLO
     else:
-        [faces_bbox, confidence_YOLO] = detect_faces_YOLO(img, face_model, format = 'xywh-center')
-        bbox_ids = torch.arange(len(faces_bbox), dtype=torch.int)
-
-    filtered_faces_bbox = faces_bbox[confidence_YOLO > 0.01]
-    filtered_ids = bbox_ids[confidence_YOLO > 0.01]
-    filtered_confidence = confidence_YOLO[confidence_YOLO > 0.01]
-
-    
-    if len(filtered_faces_bbox) != 0:
-        img_height, img_width, _ = img.shape
-        squared_bbox = transform_bbox_to_square(filtered_faces_bbox, img_width, img_height)
-        face_batch = create_faces_batch(img, face_transforms, squared_bbox, device)
-        with torch.no_grad():
-            face_batch.to(device)
-            if distilled_model:
-                raw_preds = arch.get_pred_distilled_model(emotion_model, face_batch, distilled_embedding_method)
-            else:
-                raw_preds = emotion_model(face_batch) # Predict emotions returns a tensor with logits
-    else: # If no faces are detected, return empty tensors
-        raw_preds = torch.empty(0).to(device)
-    
-    return filtered_faces_bbox, raw_preds, filtered_ids, filtered_confidence
+        return filtered_faces_bbox, raw_preds, filtered_ids
 
 
 
-def postprocessing_inference(people_detected:dict, preds:torch.Tensor, bbox_ids:torch.Tensor, 
+def postprocessing_inference(people_tracked:dict, preds:torch.Tensor, bbox_ids:torch.Tensor, 
                              mode:str = 'standard', window_size:int = 15) -> Tuple[dict, torch.Tensor]:
-    """Function to update the people_detected dictionary with the new predictions and return the output predictions based 
+    """Function to update the people_tracked dictionary with the new predictions and return the output predictions based 
     on the post processing mode.
     Args:
-        - people_detected (dict): The dictionary with the people detected. It has as key the id of the face 
+        - people_tracked (dict): The dictionary with the people detected. It has as key the id of the face 
         and as value a list of the logits of the model. It stores the window_size last logits.
         - preds (torch.Tensor): The predictions of the model. It has shape [D, NUMBER_OF_EMOT], where D are the detections.
         - bbox_ids (torch.Tensor): The ids of the faces. It has shape [D].
         - mode (str): The mode to be used for the postprocessing. It can be 'standard' or 'temporal_average'.
         - window_size (int): The size of the window to be saved in the people detected. 
     Returns:
-        - dict: The updated people_detected dictionary. It has the id as key and the list of logits as value. It stores the 
+        - dict: The updated people_tracked dictionary. It has the id as key and the list of logits as value. It stores the 
             window_size last logits.
         - torch.Tensor: The updated labels list. It has shape [D, NUMBER_OF_EMOT], where D are the detections. They are logits.  
     """
@@ -468,28 +424,28 @@ def postprocessing_inference(people_detected:dict, preds:torch.Tensor, bbox_ids:
     for i in range(detections):
         id = bbox_ids[i].item()
         if id != -1:
-            if id in people_detected:
-                people_detected[id].append(preds[i])
-                if len(people_detected[id]) > window_size:
-                    people_detected[id] = people_detected[id][-window_size:]
+            if id in people_tracked:
+                people_tracked[id].append(preds[i])
+                if len(people_tracked[id]) > window_size:
+                    people_tracked[id] = people_tracked[id][-window_size:]
             else:
-                people_detected[id] = [preds[i]]
+                people_tracked[id] = [preds[i]]
         else:
             print("No tracking id assigned to bounding box")
         # Update the output_preds
         if mode == 'standard':
             output_preds[i, :] = preds[i, :]
         elif mode == 'temporal_average':
-            output_preds[i] = torch.mean(torch.stack(people_detected[id]), dim = 0) # Compute mean accross each output logit
+            output_preds[i] = torch.mean(torch.stack(people_tracked[id]), dim = 0) # Compute mean accross each output logit
         else:
             raise ValueError(f"Invalid mode given for postprocessing inference: {mode}")
         
-    return people_detected, output_preds
+    return people_tracked, output_preds
 
 
 
 def get_pred_from_frame(frame:np.array, face_model:ultralytics.YOLO, emotion_model:torch.nn.Module, device:torch.device, 
-                         face_transforms:albumentations.Compose, people_detected: dict, params:dict
+                         face_transforms:albumentations.Compose, people_tracked: dict, params:dict, get_object_confidence:bool = False
                          ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict]:
     """Function to get the predictions from a frame using the given models and hyperparameters. It returns the faces detected
     with the bbox represented in xywh-center, the labels of the model and the ids of the faces.
@@ -499,22 +455,30 @@ def get_pred_from_frame(frame:np.array, face_model:ultralytics.YOLO, emotion_mod
         - emotion_model (torch.nn.Module): The emotion model.
         - device (torch.device): The device to be used.
         - face_transforms (albumentations.Compose): The face transformations.
-        - people_detected (dict): The dictionary with the people detected. It has as key the id of the face 
-        and as value a list of the outputs of the model, depending on params it is the logits or the normalized distribution.
+        - people_tracked (dict): The dictionary with the people being tracked. It has as key the id of the face and value a list 
+            of the last N outputs of the FER model, depending on params it will contain the logits or the normalized distribution.
         - params (dict): The dictionary with the hyperparameters.
+        - get_object_confidence (bool): If True, it returns the confidence of the face detector.
     Returns:
         - Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict]: The faces detected, the labels of the model and the 
         ids of the faces and the updated list of people detected.
     """
-    faces_bbox, raw_preds, ids = get_raw_pred_from_frame(frame, face_model, emotion_model, params['distilled_model'], params['distilled_model_out_method'], 
+    if get_object_confidence:
+        faces_bbox, raw_preds, ids, object_confidence = get_raw_pred_from_frame(frame, face_model, emotion_model, params['distilled_model'], params['distilled_model_out_method'], 
+                                                 device, face_transforms, params['face_threshold'], params['tracking'], get_object_confidence)
+    else:
+        faces_bbox, raw_preds, ids = get_raw_pred_from_frame(frame, face_model, emotion_model, params['distilled_model'], params['distilled_model_out_method'], 
                                                  device, face_transforms, params['face_threshold'], params['tracking'])
     if params['tracking']:
-        people_detected, processed_preds = postprocessing_inference(people_detected, raw_preds, ids, 
+        people_tracked, processed_preds = postprocessing_inference(people_tracked, raw_preds, ids, 
                                                                             params['postprocessing'], params['window_size'])
     else: 
         if params['postprocessing'] != 'standard': # If tracking is disabled, only standard postprocessing is allowed
             raise ValueError(f"Invalid postprocessing mode given: {params['postprocessing']}")
         processed_preds = raw_preds
     labels = arch.get_predictions(processed_preds)
-    
-    return faces_bbox, labels, ids, processed_preds, people_detected
+
+    if get_object_confidence:
+        return faces_bbox, labels, ids, processed_preds, people_tracked, object_confidence
+    else:
+        return faces_bbox, labels, ids, processed_preds, people_tracked

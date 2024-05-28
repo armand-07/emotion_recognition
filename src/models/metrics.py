@@ -197,7 +197,7 @@ def compute_multiclass_f1_score(all_targets:torch.Tensor, all_preds_labels:torch
     else:
         unique_labels = unique_labels
         names = [AFFECTNET_CAT_EMOT[i] for i in unique_labels]
-    f1_scores = f1_score(all_targets, all_preds_labels, average=None, labels=unique_labels)
+    f1_scores = f1_score(all_targets, all_preds_labels, average=None, labels=unique_labels, zero_division=0) # Compute the F1 score for each class
     width = 0.35  # the width of the bars
 
     fig, ax = plt.subplots()
@@ -212,6 +212,82 @@ def compute_multiclass_f1_score(all_targets:torch.Tensor, all_preds_labels:torch
     ax.set_xticklabels(names)
 
     fig.tight_layout()
+    return fig
+
+
+
+def compute_AP (obj_pred_conf, obj_TP_preds, total_GTs):
+    """Computes the Average Precision for the object detection task. Only one class is considered."""
+    epsilon = 1e-6 # To avoid division by zero
+
+    # Sort the confidences tensor in descending order
+    sorted_confidences, sorted_indices = torch.sort(obj_pred_conf, descending=True)
+    obj_TP_preds = obj_TP_preds[sorted_indices]
+    FP_preds = 1 - obj_TP_preds
+    
+    TP_cumsum = np.cumsum(obj_TP_preds)
+    FP_cumsum = np.cumsum(FP_preds)
+    
+    recalls = TP_cumsum / (total_GTs + epsilon)
+    precisions = torch.divide (TP_cumsum , (TP_cumsum + FP_cumsum + epsilon))
+
+    precisions = torch.cat((torch.tensor([1]), precisions)) # Add 1 at the beginning as the precision for 0 recall is 1
+    recalls = torch.cat((torch.tensor([0]), recalls)) # Add 0 at the beginning as the recall for 1 precision is 0
+
+    ap = 0.0
+    for interpolation_point in np.arange(0, 1.1, 0.1):
+        precisions_at_point = precisions[recalls >= interpolation_point]
+        # Check if the tensor is not empty
+        if precisions_at_point.numel() > 0:
+            max_value = torch.max(precisions_at_point, dim=0).values
+            ap += max_value.item()
+        else:
+            print("No precisions found where recall is greater than or equal to interpolation_point:", interpolation_point)
+    ap = ap / 11
+
+    return ap, precisions, recalls
+
+
+
+def plot_PR_curve(precisions: torch.Tensor, recalls: torch.Tensor, AP: float, IoU_threshold:float, points:int = 500) -> plt.Figure:
+    """Plots the Average Precision Curve by using the list of coordinates (precisions and recalls).
+    Params:
+        - precisions (torch.Tensor): The tensor with the precisions.
+        - recalls (torch.Tensor): The tensor with the recalls.
+        - AP (float): The Average Precision score.
+        - IoU_threshold (float): The IoU threshold used to calculate the AP.
+        - points (int): The number of points to be used for the interpolation (default = 500).
+    Returns:
+        - fig (plt.Figure): The figure with the plot of the PR curve.
+    """
+    # Convert PyTorch tensors to numpy arrays for interpolation and plotting
+    precisions_np = precisions.numpy()
+    recalls_np = recalls.numpy()
+
+    # Limit recall_values to the range of recalls_np
+    recall_values = np.linspace(0, recalls_np.max(), points)
+    # Interpolate the precision values at the generated recall values
+    precision_values = np.interp(recall_values, recalls_np, precisions_np)
+    precision_values[0] = 1.0 # Set the precision for recall = 0 to 1.0
+
+    # Plot the PR curve
+    fig, ax = plt.subplots()
+    sns.lineplot(x=recall_values, y=precision_values, ax=ax, linewidth=2.0)
+
+    # Set the title and labels
+    ax.set_title(f"PR Curve with IoU {IoU_threshold:.2f}, (AP = {AP:.2f})")
+    ax.set_xlabel("Recall")
+    ax.set_ylabel("Precision")
+
+    # Set the limits of the plot
+    plt.xlim(0.0, 1.01)
+    plt.ylim(0.0, 1.01)
+    # Set the aspect of the plot to be equal
+    ax.set_aspect('equal', adjustable='box')
+    # Add a dotted grid to the axes
+    ax.grid(True, linestyle='--')
+    
+    # Return the figure
     return fig
 
 
@@ -382,19 +458,35 @@ def save_val_wandb_metrics_dist(acc1:torcheval.metrics, acc2:torcheval.metrics, 
 
 
 
-def save_video_test_wandb_metrics(sum_IoU:float , global_sum_loss:float, total_GTs:float, total_detections:float,
+def save_video_test_wandb_metrics(global_sum_loss:float, total_GTs:int, total_object_detections:int, total_emotion_detections:int,
                                     total_inference_time:float, total_inference_time_people:float, total_frames:int,
-                                    GT_labels:torch.Tensor, preds_labels:torch.Tensor,
-                                    acc1:torcheval.metrics, acc2:torcheval.metrics, run: wandb.run) -> dict:
+                                    GT_labels:torch.Tensor, preds_labels:torch.Tensor, obj_pred_conf:torch.Tensor,
+                                    obj_TP_preds:torch.Tensor, acc1:torcheval.metrics, acc2:torcheval.metrics, 
+                                    run: wandb.run, params:dict) -> dict:
     """Save the validation metrics in Weights and Biases for the model when distillilation is applied.
     Params:
-        
+        - global_sum_loss (float): The global loss for the epoch.
+        - total_GTs (int): The total number of ground truth boxes.
+        - total_object_detections (int): The total number of object detections.
+        - total_emotion_detections (int): The total number of detections.
+        - total_inference_time (float): The total inference time.
+        - total_inference_time_people (float): The total inference time per detection.
+        - total_frames (int): The total number of frames.
+        - GT_labels (torch.Tensor): The tensor with all the ground truth labels.
+        - preds_labels (torch.Tensor): The tensor with all the predictions labels.
+        - obj_pred_conf (torch.Tensor): The tensor with all the predictions confidences.
+        - obj_TP_preds (torch.Tensor): The tensor with all the predictions of True Positives.
+        - acc1 (torch.metrics): The accuracy metric for the model.
+        - acc2 (torch.metrics): The top-2 accuracy metric for the model.
+        - run (wandb.run): The Weights and Biases run object.
+        - params (dict): The dictionary with the parameters for the run.
+    Returns:
+        - metrics (dict): The dictionary with the metrics to be saved locally when saving the model.
     """
     # Compute the metrics
-    mean_IoU = sum_IoU / total_GTs
-    global_mean_loss = global_sum_loss / total_detections
+    global_mean_loss = global_sum_loss / total_emotion_detections
     inference_time = total_inference_time / total_frames
-    inference_time_people = total_inference_time_people / total_detections
+    inference_time_people = total_inference_time_people / total_emotion_detections
 
     acc1 = acc1.compute().item()
     acc2 = acc2.compute().item()
@@ -409,10 +501,14 @@ def save_video_test_wandb_metrics(sum_IoU:float , global_sum_loss:float, total_G
     conf_matrix = confusion_matrix(GT_labels.numpy(), preds_labels.numpy(), normalize = 'true')
     chart_conf_matrix = vis.create_conf_matrix(conf_matrix, unique_labels)
 
+    # Log object detection AP and PR curve
+    ap, precisions, recalls = compute_AP (obj_pred_conf, obj_TP_preds, total_GTs)
+    PR_curve = plot_PR_curve(precisions, recalls, ap, params['IoU_threshold'])
 
-    run.log({"Mean IoU above IoU threshold": mean_IoU,
-            "Global Mean Loss": global_mean_loss,
-            "Total detections": total_detections,
+    run.log({"Global Mean Loss": global_mean_loss,
+            "Total GTs": total_GTs,
+            "Total Object detections": total_object_detections,
+            "Total Emotion detections": total_emotion_detections,
             "Inference time per frame": inference_time,
             "Inference time per person and frame": inference_time_people,
             "Model throughput (frames per second)": 1/inference_time,
@@ -421,5 +517,7 @@ def save_video_test_wandb_metrics(sum_IoU:float , global_sum_loss:float, total_G
             "F1-Score": f1_score,
             "Plot Precision and Recall by class": wandb.Image(chart_precision_recall),
             "Plot F1-Score by class": wandb.Image(chart_f1_score),
-            "Confusion Matrix": chart_conf_matrix
+            "Confusion Matrix": chart_conf_matrix,
+            "Average Precision of face detector": ap,
+            "PR Curve of face detector": wandb.Image(PR_curve)
             }, commit=True)

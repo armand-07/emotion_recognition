@@ -42,15 +42,15 @@ def infer_screen(face_model:ultralytics.YOLO, emotion_model: torch.nn.Module, de
     cv2.resizeWindow('Streaming inference', 1920, 1080)
     # Set variables if parameters are activated
     if params['tracking']:
-        people_detected = dict()
-        people_detected[-1] = [torch.ones(NUMBER_OF_EMOT).to(device)] # If no tracking id, it returns a uniform distribution
+        people_tracked = dict()
+        people_tracked[-1] = [torch.ones(NUMBER_OF_EMOT).to(device)] # If no tracking id, it returns a uniform distribution
     if params['show_mean_emotion_distrib']:
         fig, ax, distribution_container = create_figure_mean_emotion_distribution(height, width)
 
     # Read until video is completed
     while True:
         frame = np.array(pg.screenshot())
-        faces_bbox, labels, ids, processed_preds, people_detected = arch_v.get_pred_from_frame(frame, face_model, emotion_model, device, face_transforms, people_detected, params)
+        faces_bbox, labels, ids, processed_preds, people_tracked = arch_v.get_pred_from_frame(frame, face_model, emotion_model, device, face_transforms, people_tracked, params)
         if params['view_emotion_model_attention'] and len(ids) != 0:
             cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu')
         else:
@@ -89,8 +89,8 @@ def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_mode
     cv2.resizeWindow('Streaming inference', width, height)
     # Set variables if parameters are activated
     if params['tracking']:
-        people_detected = dict()
-        people_detected[-1] = [torch.ones(NUMBER_OF_EMOT).to(device)] # If no tracking id, it returns a uniform distribution
+        people_tracked = dict()
+        people_tracked[-1] = [torch.ones(NUMBER_OF_EMOT).to(device)] # If no tracking id, it returns a uniform distribution
     if params['show_mean_emotion_distrib']:
         fig, ax, distribution_container = create_figure_mean_emotion_distribution(height, width)
 
@@ -99,8 +99,8 @@ def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_mode
         ret, frame = cap.read()
         if ret == True:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) # Convert the frame to RGB
-            faces_bbox, labels, ids, processed_preds, people_detected = arch_v.get_pred_from_frame(frame, face_model, emotion_model, 
-                                                                                                   device, face_transforms, people_detected, params)
+            faces_bbox, labels, ids, processed_preds, people_tracked = arch_v.get_pred_from_frame(frame, face_model, emotion_model, 
+                                                                                                   device, face_transforms, people_tracked, params)
             if params['view_emotion_model_attention'] and len(ids) != 0: # If there are faces detected it can be observed the attention map
                 cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu')
             else:
@@ -142,10 +142,10 @@ def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, nam
     print(f"Camera resolution: {width}x{height}")
     # Set variables if parameters are activated
     if params['tracking']:
-        people_detected = dict()
-        people_detected[-1] = [torch.ones(NUMBER_OF_EMOT).to(device)] # If no tracking id, it returns a uniform distribution
+        people_tracked = dict()
+        people_tracked[-1] = [torch.ones(NUMBER_OF_EMOT).to(device)] # If no tracking id, it returns a uniform distribution
     else:
-        people_detected = None
+        people_tracked = None
     if params['show_mean_emotion_distrib']:
         fig, ax, distribution_container = create_figure_mean_emotion_distribution(height, width)
     if params['show_inference']:
@@ -158,8 +158,8 @@ def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, nam
         ret, frame = cap.read()     # ret is a boolean that returns True if the frame is available. frame is the image array.
         if ret == True:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            faces_bbox, labels, ids, processed_preds, people_detected = arch_v.get_pred_from_frame(frame, face_model, emotion_model, device, 
-                                                                                                face_transforms, people_detected, params)
+            faces_bbox, labels, ids, processed_preds, people_tracked = arch_v.get_pred_from_frame(frame, face_model, emotion_model, device, 
+                                                                                                face_transforms, people_tracked, params)
             
             if params['save_result'] or params['show_inference']: # Show the visual results if needed
                 if params['view_emotion_model_attention'] and len(ids) != 0:
@@ -201,7 +201,7 @@ def process_file(input_path:str, output_dir:str, face_model: ultralytics.YOLO, e
         # Set tracking off for images
         params_image = dict(params)
         params_image['tracking'] = False
-        people_detected = None
+        people_tracked = None
         params_image['postprocessing'] = 'standard'
 
         # Read image
@@ -213,7 +213,7 @@ def process_file(input_path:str, output_dir:str, face_model: ultralytics.YOLO, e
 
         # Make inference
         start = time.time()
-        faces_bbox, labels, ids, processed_preds, people_detected = arch_v.get_pred_from_frame(img, face_model, emotion_model, device, face_transforms, people_detected, params_image)
+        faces_bbox, labels, ids, processed_preds, people_tracked = arch_v.get_pred_from_frame(img, face_model, emotion_model, device, face_transforms, people_tracked, params_image)
         if params['save_result'] or params['show_inference']: # Show the visual results if needed
             if params['view_emotion_model_attention'] and len(ids) != 0:
                 cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu')
