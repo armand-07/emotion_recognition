@@ -520,4 +520,4 @@ def save_video_test_wandb_metrics(global_sum_loss:float, total_GTs:int, total_ob
             "Confusion Matrix": chart_conf_matrix,
             "Average Precision of face detector": ap,
             "PR Curve of face detector": wandb.Image(PR_curve)
-            }, commit=True)
+            }, step=0, commit=True)

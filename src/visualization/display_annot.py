@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 cm = plt.get_cmap('magma')
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
-from src import INTERIM_DATA_DIR, AFFECTNET_CAT_EMOT
+from src import INTERIM_DATA_DIR, AFFECTNET_CAT_EMOT, FROM_EMOT_TO_ID
 import src.models.architectures as arch
 
 
@@ -97,14 +97,15 @@ def plot_mean_emotion_distribution(img:np.array, output_preds: torch.Tensor, fig
 
 
 def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array = None, cls_weight:torch.Tensor = None,  bbox_format:str ="xywh", 
-                   display:bool = True) -> np.array:
+                   display:bool = True, color_list:list = None) -> np.array:
     """ Displays the bounding boxes and emotion annotations
     """
     img_height, img_width, _ = img.shape
     max_img_size = max(img_height, img_width)
     # Define the parameters for the rectangle
-    background_color = (0, 255, 0) # Green color in RGB
-    text_color = (0, 0, 0) # White color in RGB
+    if color_list is None:
+        bbox_color = (0, 255, 0) # Green color in RGB
+    text_color = (0, 0, 0) # Black color in RGB
 
     for i in range(len(bbox)):
         if bbox_format == "xywh":
@@ -121,12 +122,15 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
         else:
             raise ValueError("The format of the bounding box is not valid. It must be 'xywh', 'xywh-center' or 'xyxy'")
         id = bbox_ids[i].item()
-        if id != -1 and bbox_ids is not None:
-            text = str(id)+":"+labels[i]
-        elif id == -1:
+        if id != -1 and bbox_ids is not None: # If bbox_ids is not None and the id is not Unknown
+            text = str(id) + ":" + labels[i]
+            bbox_color = color_list[FROM_EMOT_TO_ID[labels[i]]]
+        elif id == -1: # If bbox_ids is not None and the id is Unknown
             text = 'Unknown' # Unknown detection as the bbox_id is -1
-        else:
+            bbox_color = (128, 128, 128) # Grey color in RGB
+        else: # If bbox_ids is None
             text = str(int(i))+":"+labels[i]
+            bbox_color = color_list[FROM_EMOT_TO_ID[labels[i]]]
 
         # If cls_weight is not None, it will display the class attention map with what the emotion model is seeing
         if cls_weight is not None:
@@ -159,7 +163,7 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
         bbox_thickness = int(round(max_img_size / 500))
         bbox_thickness = max(1, bbox_thickness)
         # Add bbox
-        cv2.rectangle(img, (x, y), (x+w, y+h), background_color, bbox_thickness)
+        cv2.rectangle(img, (x, y), (x+w, y+h), bbox_color, bbox_thickness)
             
         # Finds space required by the text so that we can put a correct background
         font_scale = max_img_size / 1500
@@ -168,7 +172,7 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
         (w_text, h_text), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX , font_scale, text_thickness) 
 
         # Add text and background above the bbox
-        img = cv2.rectangle(img, (x, y - int(h_text*1.5)), (x + w_text, y), background_color, -1)
+        img = cv2.rectangle(img, (x, y - int(h_text*1.5)), (x + w_text, y), bbox_color, -1)
         img = cv2.putText(img, text, (x, y - int(h_text*0.3)),
                                 cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_color, int(text_thickness), lineType = cv2.LINE_AA)
 

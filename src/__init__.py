@@ -1,7 +1,6 @@
 from pathlib import Path
 import os
 
-
 # Define path variables
 ROOT_DIR = Path(Path(__file__).resolve().parent.parent)
 MODELS_DIR = os.path.join(ROOT_DIR, "models")
@@ -21,8 +20,10 @@ TEST_VIDEO_DIR =  "C:\\Users\\arman\\Desktop\\emotion_recognition\\data\\test_vi
 
 # Define the corresponding categorical emotions of AffectNet
 # 0: Neutral, 1: Happy, 2: Sad, 3: Surprise, 4: Fear, 5: Disgust, 6: Anger, 7: Contempt
-AFFECTNET_CAT_EMOT = ["Neutral", "Happy", "Sad", "Surprise", "Fear", "Disgust", "Anger", "Contempt"] 
+AFFECTNET_CAT_EMOT = ["Neutral", "Happy", "Sad", "Surprise", "Fear", "Disgust", "Anger", "Contempt"]
+FROM_EMOT_TO_ID = {emot: i for i, emot in enumerate(AFFECTNET_CAT_EMOT)}
 NUMBER_OF_EMOT = len(AFFECTNET_CAT_EMOT)
+EMOT_COLORS = ['whitesmoke', 'yellow', 'dodgerblue', 'orange', 'fuchsia', 'deeppink', 'red', 'limegreen'] # https://matplotlib.org/stable/gallery/color/named_colors.html
 
 
 # Define columns for the interim labels

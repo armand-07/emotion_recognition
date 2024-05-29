@@ -34,7 +34,7 @@ def visualize_batch(img, cat_label = None, col = 8, adjust_to_vis_range = False)
 def create_conf_matrix(conf_matrix, unique_labels = None):
     """Create a confusion matrix using the plotly library."""
     if unique_labels is not None:
-        labels = unique_labels
+        labels = [AFFECTNET_CAT_EMOT[i] for i in unique_labels]
     else:
         labels = AFFECTNET_CAT_EMOT
     fig = px.imshow(conf_matrix,

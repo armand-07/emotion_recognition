@@ -6,7 +6,9 @@ from typing import Tuple
 from pathlib import Path
 import yaml
 
+
 import cv2
+import matplotlib.colors as mcolors
 try:
     import pyautogui as pg
 except: # For the case of running in a server
@@ -16,20 +18,21 @@ import numpy as np
 import albumentations
 import ultralytics
 
-from src import INFERENCE_DIR, NUMBER_OF_EMOT
+from src import INFERENCE_DIR, NUMBER_OF_EMOT, EMOT_COLORS
 import src.models.architectures_video as arch_v
 from src.visualization.display_annot import plot_bbox_emot, plot_mean_emotion_distribution, create_figure_mean_emotion_distribution
 
 
 
 def infer_screen(face_model:ultralytics.YOLO, emotion_model: torch.nn.Module, device: torch.device, 
-                face_transforms:albumentations.Compose, params:dict) -> None:
+                face_transforms:albumentations.Compose, EMOT_COLORS_RGB:list, params:dict) -> None:
     """Function to make inference in a screen. It shows the results in a window.
     Args:
         - face_model (ultralytics.YOLO): The face detector model.
         - emotion_model (torch.nn.Module): The emotion model.
         - device (torch.device): The device to be used.
         - face_transforms (albumentations.Compose): The face transforms.
+        - EMOT_COLORS_RGB (list): The list of RGB colors for the emotions in the same order as the emotions.
         - params (dict): The parameters to be used for the inference.
     Returns:
         - None
@@ -55,7 +58,7 @@ def infer_screen(face_model:ultralytics.YOLO, emotion_model: torch.nn.Module, de
             cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu')
         else:
             cls_weight = None
-        frame = plot_bbox_emot(frame, faces_bbox, labels, ids, cls_weight, bbox_format ="xywh", display = False)
+        frame = plot_bbox_emot(frame, faces_bbox, labels, ids, cls_weight, bbox_format ="xywh", display = False, color_list = EMOT_COLORS_RGB)
         # Display the mean sentiment of the people in the frame
         if params['show_mean_emotion_distrib']:
             frame, fig, ax, distribution_container = plot_mean_emotion_distribution(frame, processed_preds, fig, ax, distribution_container)
@@ -67,7 +70,7 @@ def infer_screen(face_model:ultralytics.YOLO, emotion_model: torch.nn.Module, de
 
 
 def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_model: torch.nn.Module, device: torch.device, 
-                face_transforms:albumentations.Compose, params:dict) -> None:
+                face_transforms:albumentations.Compose, EMOT_COLORS_RGB:list, params:dict) -> None:
     """Function to make inference in a video stream. It shows the results in a window.
     Args:
         - cap (cv2.VideoCapture): The video capture object.
@@ -75,6 +78,7 @@ def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_mode
         - emotion_model (torch.nn.Module): The emotion model.
         - device (torch.device): The device to be used.
         - face_transforms (albumentations.Compose): The face transforms.
+        - EMOT_COLORS_RGB (list): The list of RGB colors for the emotions in the same order as the emotions.
         - params (dict): The parameters to be used for the inference.
     Returns:
         - None
@@ -105,7 +109,7 @@ def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_mode
                 cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu')
             else:
                 cls_weight = None
-            frame = plot_bbox_emot(frame, faces_bbox, labels, ids, cls_weight, bbox_format ="xywh-center", display = False)
+            frame = plot_bbox_emot(frame, faces_bbox, labels, ids, cls_weight, bbox_format ="xywh-center", display = False, color_list = EMOT_COLORS_RGB)
             # Display the mean sentiment of the people in the frame
             if params['show_mean_emotion_distrib']:
                 frame, fig, ax, distribution_container = plot_mean_emotion_distribution(frame, processed_preds, fig, ax, distribution_container)
@@ -120,7 +124,7 @@ def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_mode
 
 def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, name:str, face_model: ultralytics.YOLO, 
                         emotion_model: torch.nn.Module, device: torch.device, face_transforms: albumentations.Compose,
-                        params:dict) -> None:
+                        EMOT_COLORS_RGB:list, params:dict) -> None:
     """Function to make inference in a video and save the result in capturer.
     Args:
         - cap (cv2.VideoCapture): The video capture object.
@@ -130,6 +134,7 @@ def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, nam
         - emotion_model (torch.nn.Module): The emotion model.
         - device (torch.device): The device to be used.
         - face_transforms (albumentations.Compose): The face transforms.
+        - EMOT_COLORS_RGB (list): The list of RGB colors for the emotions in the same order as the emotions.
         - params (dict): The parameters to be used for the inference.
     Returns:
         - None
@@ -166,7 +171,8 @@ def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, nam
                     cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu') 
                 else:
                     cls_weight = None
-                frame = plot_bbox_emot(frame, faces_bbox, labels, ids, cls_weight, bbox_format ="xywh-center", display = False)
+                frame = plot_bbox_emot(frame, faces_bbox, labels, ids, cls_weight, bbox_format ="xywh-center", display = False, 
+                                       color_list = EMOT_COLORS_RGB)
                 # Display the mean sentiment of the people in the frame
                 if params['show_mean_emotion_distrib']:
                     frame, fig, ax, distribution_container = plot_mean_emotion_distribution(frame, processed_preds, fig, ax, distribution_container)
@@ -183,7 +189,7 @@ def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, nam
 
 
 def process_file(input_path:str, output_dir:str, face_model: ultralytics.YOLO, emotion_model:torch.nn.Module, device: torch.device, 
-                 face_transforms: albumentations.Compose, params: dict) -> None:
+                 face_transforms: albumentations.Compose, EMOT_COLORS_RGB:list,  params: dict) -> None:
     """Function to process a file, either an image or a video. It saves the results in the output_dir, and if needed shows realtime 
     results.
     Args:
@@ -193,6 +199,7 @@ def process_file(input_path:str, output_dir:str, face_model: ultralytics.YOLO, e
         - emotion_model (torch.nn.Module): The emotion model.
         - device (torch.device): The device to be used.
         - face_transforms (albumentations.Compose): The face transforms.
+        - EMOT_COLORS_RGB (list): The list of RGB colors for the emotions in the same order as the emotions.
         - params (dict): The parameters to be used for the inference.
     Returns:
         - None 
@@ -213,13 +220,16 @@ def process_file(input_path:str, output_dir:str, face_model: ultralytics.YOLO, e
 
         # Make inference
         start = time.time()
-        faces_bbox, labels, ids, processed_preds, people_tracked = arch_v.get_pred_from_frame(img, face_model, emotion_model, device, face_transforms, people_tracked, params_image)
+        faces_bbox, labels, ids, processed_preds, people_tracked = arch_v.get_pred_from_frame(img, face_model, emotion_model, 
+                                                                                              device, face_transforms, 
+                                                                                              people_tracked, params_image)
         if params['save_result'] or params['show_inference']: # Show the visual results if needed
             if params['view_emotion_model_attention'] and len(ids) != 0:
                 cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu')
             else:
                 cls_weight = None
-            img = plot_bbox_emot(img, faces_bbox, labels, ids, cls_weight, bbox_format ="xywh", display = False)
+            img = plot_bbox_emot(img, faces_bbox, labels, ids, cls_weight, bbox_format ="xywh", display = False, 
+                                 color_list = EMOT_COLORS_RGB)
             if params['show_mean_emotion_distrib']:
                 img, fig, ax, distribution_container = plot_mean_emotion_distribution(img, processed_preds, fig, ax, 
                                                                                       distribution_container)
@@ -259,7 +269,7 @@ def process_file(input_path:str, output_dir:str, face_model: ultralytics.YOLO, e
         output_cap = cv2.VideoWriter(output_filename, fourcc, fps, (frame_width, frame_height))
         # Make inference
         start = time.time()
-        infer_video_and_save(cap, output_cap, name, face_model, emotion_model, device, face_transforms, params)
+        infer_video_and_save(cap, output_cap, name, face_model, emotion_model, device, face_transforms, EMOT_COLORS_RGB, params)
         end = time.time()
         # Store results and release the video capture object
         cap.release()
@@ -300,13 +310,22 @@ def main(mode: str, input_path: str, output_dir:str, cpu:bool) -> None:
     face_model, emotion_model, distilled_model, face_transforms, device = arch_v.load_video_models(params['wandb_id_emotion_model'], params['face_detector_size'], 
                                                                                                    params['view_emotion_model_attention'], cpu)
     params['distilled_model'] = distilled_model
+    
+    if params['variable_color']: # If the color of the emotions is variable, it needs to be converted to RGB
+        # Convert color names to RGB values
+        EMOT_COLORS_RGB = [mcolors.to_rgb(color) for color in EMOT_COLORS]
+        # Convert RGB values to the range of 0 to 255
+        EMOT_COLORS_RGB = [(int(r * 255), int(g * 255), int(b * 255)) for r, g, b in EMOT_COLORS_RGB]
+    else:
+        EMOT_COLORS_RGB = None
+
     # Start with inference
     if mode == 'stream':
         cap = cv2.VideoCapture(0)
-        infer_stream(cap, face_model, emotion_model, device, face_transforms, params)
+        infer_stream(cap, face_model, emotion_model, device, face_transforms, EMOT_COLORS_RGB, params)
 
     elif mode == 'screen':
-        infer_screen(face_model, emotion_model, device, face_transforms, params)
+        infer_screen(face_model, emotion_model, device, face_transforms, EMOT_COLORS_RGB, params)
 
     elif mode == 'save':
         input_path = os.path.join(INFERENCE_DIR, input_path)
@@ -318,11 +337,11 @@ def main(mode: str, input_path: str, output_dir:str, cpu:bool) -> None:
                 input_file_path = os.path.join(input_path, file)
                 if params['tracking'] and not first_execution: # If tracking is enabled, it needs to restart the tracking by realoading the model
                     face_model = arch_v.load_YOLO_model_face_recognition(size = params['face_detector_size'], device = device)
-                process_file(input_file_path, output_dir, face_model, emotion_model, device, face_transforms, params)
+                process_file(input_file_path, output_dir, face_model, emotion_model, device, face_transforms, EMOT_COLORS_RGB, params)
                 first_execution = False
         elif os.path.isfile(input_path):
             print(f"Found an archive")
-            process_file(input_path, output_dir, face_model, emotion_model, device, face_transforms, params)
+            process_file(input_path, output_dir, face_model, emotion_model, device, face_transforms, EMOT_COLORS_RGB, params)
         else:
             print(f"{input_path} is neither a directory nor an archive file")
 

@@ -142,7 +142,7 @@ def eval_model_on_videos(annotations_path:str, video_dir:str, params:dict, run: 
     # Iterate over each video file
     for video_file in video_files:
         video_filename = video_file.split(".")[0]
-        if video_filename not in df_annotations['filename'].values or video_filename != 'izhar_recording2': # If the annotation file does not exist, skip this video
+        if video_filename not in df_annotations['filename'].values:# or video_filename != 'izhar_recording2': # If the annotation file does not exist, skip this video
             print(f'Skipping video {video_filename} because no annotation was found in the processed annotations')
             continue
         else: # Analize the video

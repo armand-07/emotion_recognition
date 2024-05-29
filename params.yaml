@@ -54,6 +54,7 @@ inference:
   save_result: True
   show_inference: False
   view_emotion_model_attention: False
+  variable_color: True
 
 
 test_video:
