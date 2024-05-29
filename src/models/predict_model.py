@@ -228,7 +228,7 @@ def process_file(input_path:str, output_dir:str, face_model: ultralytics.YOLO, e
                 cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu')
             else:
                 cls_weight = None
-            img = plot_bbox_emot(img, faces_bbox, labels, ids, cls_weight, bbox_format ="xywh", display = False, 
+            img = plot_bbox_emot(img, faces_bbox, labels, ids, cls_weight, bbox_format ="xywh-center", display = False, 
                                  color_list = EMOT_COLORS_RGB)
             if params['show_mean_emotion_distrib']:
                 img, fig, ax, distribution_container = plot_mean_emotion_distribution(img, processed_preds, fig, ax, 

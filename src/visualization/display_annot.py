@@ -1,6 +1,7 @@
 from pathlib import Path
 from prettytable import PrettyTable
 from typing import Tuple
+import os
 
 import cv2
 import numpy as np
@@ -124,13 +125,15 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
         id = bbox_ids[i].item()
         if id != -1 and bbox_ids is not None: # If bbox_ids is not None and the id is not Unknown
             text = str(id) + ":" + labels[i]
-            bbox_color = color_list[FROM_EMOT_TO_ID[labels[i]]]
+            if color_list is not None:
+                bbox_color = color_list[FROM_EMOT_TO_ID[labels[i]]]
         elif id == -1: # If bbox_ids is not None and the id is Unknown
             text = 'Unknown' # Unknown detection as the bbox_id is -1
             bbox_color = (128, 128, 128) # Grey color in RGB
         else: # If bbox_ids is None
             text = str(int(i))+":"+labels[i]
-            bbox_color = color_list[FROM_EMOT_TO_ID[labels[i]]]
+            if color_list is not None:
+                bbox_color = color_list[FROM_EMOT_TO_ID[labels[i]]]
 
         # If cls_weight is not None, it will display the class attention map with what the emotion model is seeing
         if cls_weight is not None:
@@ -249,7 +252,8 @@ def plot_bbox_annotations(img, bbox_annot, format ="xywh", conf_threshold = 0, c
 
 
 def display_img_annot_PAMI (sample_df, bbox_thickness = 2, font_size = 0.6):
-    sample_path = Path(sample_df['path'])
+    sample_path = os.path.join(INTERIM_DATA_DIR, 'images', Path(sample_df['path']))
+
     print("The path of the example image is:", sample_path)
     print("The image orig DB is:", sample_df['orig_db'])
 

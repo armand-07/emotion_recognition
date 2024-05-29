@@ -45,7 +45,7 @@ eval:
 inference:
   wandb_id_emotion_model: "sage-sweep-9"
   face_detector_size: "medium" # "nano" | "medium" | "large"
-  face_threshold: 0.65
+  face_threshold: 0.25
   tracking: True
   postprocessing: "temporal_average"
   window_size: 3
