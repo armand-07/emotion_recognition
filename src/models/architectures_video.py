@@ -253,7 +253,7 @@ def track_faces_YOLO(img:np.array, pretrained_model:ultralytics.YOLO, format:str
         - verbose (bool): If True, it prints model information
     Returns:
         - boxes (torch.Tensor): Bounding boxes of the detected faces
-        - bbox_ids (torch.Tensor): Id of the detected faces
+        - bbox_ids (torch.Tensor): Id of the detected faces. The track ids starts in id 1.
         - conf (torch.Tensor): Confidence of the detection
     """
     # Make inference
@@ -402,45 +402,73 @@ def get_raw_pred_from_frame(img:np.array, face_model:ultralytics.YOLO, emotion_m
         return filtered_faces_bbox, raw_preds, filtered_ids
 
 
-
-def postprocessing_inference(people_tracked:dict, preds:torch.Tensor, bbox_ids:torch.Tensor, 
-                             mode:str = 'standard', window_size:int = 15) -> Tuple[dict, torch.Tensor]:
-    """Function to update the people_tracked dictionary with the new predictions and return the output predictions based 
-    on the post processing mode.
-    Args:
-        - people_tracked (dict): The dictionary with the people detected. It has as key the id of the face 
-        and as value a list of the logits of the model. It stores the window_size last logits.
-        - preds (torch.Tensor): The predictions of the model. It has shape [D, NUMBER_OF_EMOT], where D are the detections.
-        - bbox_ids (torch.Tensor): The ids of the faces. It has shape [D].
-        - mode (str): The mode to be used for the postprocessing. It can be 'standard' or 'temporal_average'.
-        - window_size (int): The size of the window to be saved in the people detected. 
+def init_people_tracked(device:torch.device, window_size:int, preallocated_ids:int = 1000) -> torch.Tensor:
+    """Function to initialize the people tracked as a torch.Tensor. Each row represents a person 
+    and each column the N'th last emotion prediction.
+    Params:
+        - device (torch.device): The device to be used.
+        - window_size (int): The size of the window to save the last window_size 
+        emotions (including the current) for the people detected.
+        - preallocated_ids (int): The number of ids to be preallocated. It is used 
+        to avoid resizing the tensor each time a new detections appears.
     Returns:
-        - dict: The updated people_tracked dictionary. It has the id as key and the list of logits as value. It stores the 
-            window_size last logits.
-        - torch.Tensor: The updated labels list. It has shape [D, NUMBER_OF_EMOT], where D are the detections. They are logits.  
+        - torch.Tensor: The people tracked tensor. It has shape [preallocated_ids, 
+        window_size, NUMBER_OF_EMOT], where NUMBER_OF_EMOT is the number of emotions. The first row 
+        is used to store an special id for unknown tracking. So the track ids should start from 1.
     """
-    output_preds = torch.zeros((len(preds), NUMBER_OF_EMOT))
-    detections = len(preds)
-    for i in range(detections):
-        id = bbox_ids[i].item()
-        if id != -1:
-            if id in people_tracked:
-                people_tracked[id].append(preds[i])
-                if len(people_tracked[id]) > window_size:
-                    people_tracked[id] = people_tracked[id][-window_size:]
-            else:
-                people_tracked[id] = [preds[i]]
-        else:
-            print("No tracking id assigned to bounding box")
-        # Update the output_preds
-        if mode == 'standard':
-            output_preds[i, :] = preds[i, :]
-        elif mode == 'temporal_average':
-            output_preds[i] = torch.mean(torch.stack(people_tracked[id]), dim = 0) # Compute mean accross each output logit
-        else:
-            raise ValueError(f"Invalid mode given for postprocessing inference: {mode}")
-        
+    people_tracked = torch.zeros((preallocated_ids, window_size, NUMBER_OF_EMOT)).to(device)
+    people_tracked[0] = torch.ones(window_size,NUMBER_OF_EMOT).to(device) # If no tracking id, it returns a uniform distribution, it is located at the end of the tensor
+    return people_tracked
+
+    
+
+def postprocessing_inference(people_tracked:torch.Tensor, preds:torch.Tensor, bbox_ids:torch.Tensor, 
+                             device:torch.device, saving_prediction:str, mode:str = 'standard') -> Tuple[dict, torch.Tensor]:
+    """Function to update the people_tracked with the new predictions and return the output predictions based 
+    on the post processing mode. Depending on the saving_prediction parameter, it will save the predictions in logits 
+    or in normalized version.
+    Args:
+        - people_tracked (torch.Tensor): The updated people_tracked. It has the bbox_id as row and per each column the 
+        last N predictions of the model. The first row is used to store an special id for unknown tracking.
+        - preds (torch.Tensor): The predictions of the model. It has shape [D, NUMBER_OF_EMOT], where D are the detections. 
+            It is in logits
+        - bbox_ids (torch.Tensor): The ids of the faces. It has shape [D].
+        - device (torch.device): The device to be used.
+        - saving_prediction (str): The method to save the predictions. It can be 'logits' or 'distrib'.
+        - mode (str): The mode to be used for the postprocessing. It can be 'standard' or 'temporal_average'.
+    Returns:
+        - torch.Tensor: The updated people_tracked. It has the bbox_id as row and per each column the 
+        last N predictions of the model. The first row is used to store an special id for unknown tracking.
+        - torch.Tensor: The updated labels list. It has shape [D, NUMBER_OF_EMOT], where D are the detections. 
+    """
+    if bbox_ids.shape[0] == 0:
+        return people_tracked, torch.zeros(1,NUMBER_OF_EMOT).to(device)
+    
+    assert saving_prediction in ['logits', 'distrib'], f"Invalid saving_prediction given: {saving_prediction}"
+    
+    if saving_prediction == 'logits':
+        pass
+    elif saving_prediction == 'distrib':
+        preds = arch.get_distributions(preds) # Normalize the output to ensure it is 0-1
+
+    output_preds = torch.zeros((preds.shape[0], NUMBER_OF_EMOT)).to(device)
+    # Update the people tracked based on bbox ids and new pred, delete the last element of the tensor. It is added 1 to bbox_ids as 0 is special id for unknown tracking
+    people_tracked[bbox_ids] = torch.cat((preds.unsqueeze(1), people_tracked[bbox_ids, :-1]), dim = 1)
+    
+    if mode == 'standard':
+        output_preds = preds
+    elif mode == 'temporal_average':
+        output_preds = torch.mean(people_tracked[bbox_ids], dim = 1) # Compute mean accross each output logit
+    else:
+        raise ValueError(f"Invalid mode given for postprocessing inference: {mode}")
+    
+    if saving_prediction == 'logits':
+        pass
+    elif saving_prediction == 'distrib':
+        output_preds = torch.divide(output_preds, torch.sum(output_preds, dim=1, keepdim=True))  # Normalize the output to ensure it is 0-1 (as in init there may be norm preds with 0 init vectors)
+    
     return people_tracked, output_preds
+    
 
 
 
@@ -470,8 +498,8 @@ def get_pred_from_frame(frame:np.array, face_model:ultralytics.YOLO, emotion_mod
         faces_bbox, raw_preds, ids = get_raw_pred_from_frame(frame, face_model, emotion_model, params['distilled_model'], params['distilled_model_out_method'], 
                                                  device, face_transforms, params['face_threshold'], params['tracking'])
     if params['tracking']:
-        people_tracked, processed_preds = postprocessing_inference(people_tracked, raw_preds, ids, 
-                                                                            params['postprocessing'], params['window_size'])
+        people_tracked, processed_preds = postprocessing_inference(people_tracked, raw_preds, ids, device,
+                                                                    params['saving_prediction'], params['postprocessing'])
     else: 
         if params['postprocessing'] != 'standard': # If tracking is disabled, only standard postprocessing is allowed
             raise ValueError(f"Invalid postprocessing mode given: {params['postprocessing']}")

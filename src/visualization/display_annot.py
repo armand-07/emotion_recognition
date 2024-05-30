@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 cm = plt.get_cmap('magma')
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
-from src import INTERIM_DATA_DIR, AFFECTNET_CAT_EMOT, FROM_EMOT_TO_ID
+from src import INTERIM_DATA_DIR, AFFECTNET_CAT_EMOT, FROM_EMOT_TO_ID, NUMBER_OF_EMOT
 import src.models.architectures as arch
 
 
@@ -38,14 +38,35 @@ def create_figure_mean_emotion_distribution(height:int, width:int) -> Tuple[plt.
 
     return fig, ax, distribution_container
 
+def create_figure_mean_emotion_evolution(height:int, width:int) -> Tuple[plt.figure, plt.axis, plt.bar]:
+    """ Creates a figure and axis for plotting the mean emotion evolution. 
+    The distribution_container defined as None is used to update the data of the plot.
+    Params:
+        - height (int): height of the image
+        - width (int): width of the image
+    Returns:
+        - fig (plt.figure): figure object
+        - ax (plt.axis): axis object
+        - distribution_container (plt.bar): container for the distribution plot"""
+    # Precompute the plot size depending on image size
+    max_length = max(height, width)
+    dpi = 100 # Dots per inch, standard is 100
+    width_in = (max_length/2)/ dpi
+    height_in = (max_length/4) / dpi
+    fig, ax = plt.subplots(figsize=(width_in, height_in), dpi=dpi)
+    distribution_container = None
+
+    return fig, ax, distribution_container
 
 
-def plot_mean_emotion_distribution(img:np.array, output_preds: torch.Tensor, fig:plt.figure, 
+
+def plot_mean_emotion_distribution(img:np.array, output_preds: torch.Tensor, saving_prediction: str, fig:plt.figure, 
                                    ax:plt.axis, distribution_container:plt.bar = None)-> Tuple[np.array, plt.figure, plt.axis, plt.bar]:
     """ Plots the mean emotion distribution on the image. The distribution_container is used to update the data of the plot.
     Params:
         - img (np.array): image as a numpy array
         - output_preds (torch.Tensor): output predictions from the model
+        - saving_prediction (str): The method to save the predictions. It can be 'logits' or 'distrib'.
         - fig (plt.figure): figure object
         - ax (plt.axis): axis object
         - distribution_container (plt.bar): container for the distribution plot
@@ -56,10 +77,15 @@ def plot_mean_emotion_distribution(img:np.array, output_preds: torch.Tensor, fig
         - distribution_container (plt.bar): updated container for the distribution plot
     """
     if output_preds.shape[0] == 0: # If there are no detections, set mean_distrib to zeros
-        mean_distrib = np.zeros(8)
+        mean_distrib = np.zeros(NUMBER_OF_EMOT)
     else:
-        # Get the emotion distribution for each detection
-        output_distrib = arch.get_distributions(output_preds)
+        # Get the emotion distribution for each detection if it is in logits, else pass as it is already a distribution
+        if saving_prediction == 'logits':
+            output_distrib = arch.get_distributions(output_preds)
+        elif saving_prediction == 'distrib':
+            output_distrib = output_preds
+        else:
+            raise ValueError("The saving_prediction parameter must be 'logits' or 'distrib'")
         # Get mean emotion distribution across all detections
         mean_distrib = torch.mean(output_distrib, dim = 0)
         mean_distrib = mean_distrib.cpu().numpy()
@@ -70,11 +96,11 @@ def plot_mean_emotion_distribution(img:np.array, output_preds: torch.Tensor, fig
     # If bar_container is None, this is the first time plotting the mean emotion distribution
     if distribution_container is None:
         distribution_container = ax.bar(AFFECTNET_CAT_EMOT, mean_distrib, color = 'cornflowerblue')
-        ax.set_ylabel('Probability', fontsize=int(12*(max_length/1920)))
+        ax.set_ylabel('Mean confidence', fontsize=int(12*(max_length/1920)))
         ax.set_ylim([0.0, 1.0])
         ax.grid(axis = 'y', linestyle = '--', linewidth = 0.5, color = 'black')
         ax.set_xlabel('Emotion categories', fontsize=int(12*(max_length/1920)))
-        ax.set_title('Mean emotion distribution for detections', fontsize=int(16*(max_length/1920)))
+        ax.set_title('Mean emotion confidence distribution for detections', fontsize=int(16*(max_length/1920)))
         # Set the font size for the tick labels
         plt.xticks(fontsize=int(9*(max_length/1920)))
         plt.yticks(fontsize=int(9*(max_length/1920)))
@@ -94,6 +120,79 @@ def plot_mean_emotion_distribution(img:np.array, output_preds: torch.Tensor, fig
     img[height-padding-height_distrib : height-padding, width-padding-width_distrib: width-padding] = img_distrib
 
     return img, fig, ax, distribution_container
+
+
+
+def plot_mean_emotion_evolution(img:np.array, output_preds: torch.Tensor, last_mean_emotions:torch.Tensor, saving_prediction:str, 
+                                EMOT_COLORS_RGB:list, fig:plt.figure, ax:plt.axis, line_container:plt.bar = None
+                                )-> Tuple[np.array, plt.figure, plt.axis, plt.bar]:
+    """Plots the mean emotion evolution on the image. The distribution_container is used to update the data of the plot.
+    Params:
+        - img (np.array): image as a numpy array
+        - output_preds (torch.Tensor): output predictions from the model
+        - last_mean_emotions (torch.Tensor): last mean emotions to plot. The shape is [NUMBER_OF_EMOTIONS, FRAMES_TO_PLOT]
+        - saving_prediction (str): The method to save the predictions. It can be 'logits' or 'distrib'.
+        - color (str): color of the line plot
+        - fig (plt.figure): figure object
+        - ax (plt.axis): axis object
+        - line_container (plt.bar): container for the line plot
+    Returns:
+        - img (np.array): image with the mean emotion distribution plot
+        - fig (plt.figure): updated figure object
+        - ax (plt.axis): updated axis object
+        - line_container (plt.bar): updated container for the line plot
+    """
+    if output_preds.shape[0] == 0: # If there are no detections, set mean_distrib to zeros
+        mean_distrib = torch.zeros(NUMBER_OF_EMOT)
+    else:
+        # Get the emotion distribution for each detection if it is in logits, else pass as it is already a distribution
+        if saving_prediction == 'logits':
+            output_distrib = arch.get_distributions(output_preds)
+        elif saving_prediction == 'distrib':
+            output_distrib = output_preds
+        else:
+            raise ValueError("The saving_prediction parameter must be 'logits' or 'distrib'")
+        # Get mean emotion distribution across all detections
+        mean_distrib = torch.mean(output_distrib, dim = 0)
+    
+    # Update the mean emotion distribution plot
+    last_mean_emotions = torch.cat((mean_distrib.view(-1, 1), last_mean_emotions[:, :-1]), dim = 1)
+    numpy_mean_emotions = last_mean_emotions.cpu().numpy()
+    # Get the max length of the image
+    height, width, _ = img.shape
+    max_length = max(height, width)
+    # If bar_container is None, this is the first time plotting the mean emotion distribution
+    if line_container is None:
+        matplotlib_colors = [(float(r / 255), float(g / 255), float(b / 255)) for r, g, b in EMOT_COLORS_RGB]
+        line_container = []
+        for i in range(numpy_mean_emotions.shape[0]):
+            line, = ax.plot(numpy_mean_emotions[i], color=matplotlib_colors[i])
+            line_container.append(line)
+        ax.set_ylabel('Mean confidence', fontsize=int(12*(max_length/1920)))
+        ax.set_ylim([0.0, 1.0])
+        ax.grid(axis = 'y', linestyle = '--', linewidth = 0.5, color = 'black')
+        ax.set_xlabel('Past frames', fontsize=int(12*(max_length/1920)))
+        ax.invert_xaxis()
+        ax.set_title('Mean emotion confidence evolution for detections', fontsize=int(16*(max_length/1920)))
+        # Set the font size for the tick labels
+        plt.xticks(fontsize=int(9*(max_length/1920)))
+        plt.yticks(fontsize=int(9*(max_length/1920)))
+        plt.subplots_adjust(left = 0.15, right = 0.95, top=0.9, bottom=0.15)
+    else: # If bar_container is not None just update the data of the plot
+        for i, new_data in enumerate(numpy_mean_emotions): # Update the data of the plot per emotion
+            line_container[i].set_ydata(new_data)
+
+    # Convert plot to image as a numpy array
+    canvas = FigureCanvas(fig)
+    canvas.draw()
+    img_plot = np.frombuffer(canvas.tostring_rgb(), dtype='uint8').reshape(canvas.get_width_height()[::-1] + (3,))
+
+    # Put the distribution plot on the image
+    height_plot, width_plot, _ = img_plot.shape 
+    padding =  int(20*(max_length/1920)) # Padding in pixels
+    img[height-padding-height_plot : height-padding, width-padding-width_plot: width-padding] = img_plot
+
+    return img, last_mean_emotions, fig, ax, line_container
 
 
 

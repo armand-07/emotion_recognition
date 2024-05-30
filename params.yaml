@@ -43,26 +43,31 @@ eval:
 
 
 inference:
-  wandb_id_emotion_model: "sage-sweep-9"
-  face_detector_size: "nano" # "nano" | "medium" | "large"
+  wandb_id_emotion_model: "sage-sweep-9"  # Wandb id of selected model
+  face_detector_size: "nano"              # "nano" | "medium" | "large"
   face_threshold: 0.25
   tracking: True
-  postprocessing: "temporal_average"
+  saving_prediction: "distrib"            # "logits" | "distrib"
+  postprocessing: "temporal_average"      # "standard" | "temporal_average" 
   window_size: 3
-  distilled_model_out_method: "class" # only used in distilled models
+  distilled_model_out_method: "class"     # "class" | "distill" | "both" : only used in distilled models;
   show_mean_emotion_distrib: False
+  show_mean_emotion_evolution: True
+  evolution_frames: 120                   # The number of last visible frames
   save_result: True
   show_inference: False
   view_emotion_model_attention: False
   variable_color: True
 
 
+
 test_video:
-  wandb_id_emotion_model: "sage-sweep-9"
-  face_detector_size: "nano"
+  wandb_id_emotion_model: "sage-sweep-9"  # Wandb id of selected model
+  face_detector_size: "nano"              # "nano" | "medium" | "large"
   face_threshold: 0.0
   tracking: True
-  postprocessing: "temporal_average"
+  saving_prediction: "distrib"            # "logits" | "distrib"
+  postprocessing: "temporal_average"      # "standard" | "temporal_average" 
   window_size: 3
-  distilled_model_out_method: "class" # only used in distilled models
+  distilled_model_out_method: "class"     # "class" | "distill" | "both" : only used in distilled models;
   IoU_threshold: 0.75
