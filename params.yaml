@@ -44,7 +44,7 @@ eval:
 
 inference:
   wandb_id_emotion_model: "sage-sweep-9"  # Wandb id of selected model
-  face_detector_size: "nano"              # "nano" | "medium" | "large"
+  face_detector_size: "medium"              # "nano" | "medium" | "large"
   face_threshold: 0.25
   tracking: True
   saving_prediction: "distrib"            # "logits" | "distrib"
@@ -52,7 +52,7 @@ inference:
   window_size: 3
   distilled_model_out_method: "class"     # "class" | "distill" | "both" : only used in distilled models;
   show_mean_emotion_distrib: False
-  show_mean_emotion_evolution: True
+  show_mean_emotion_evolution: False
   evolution_frames: 120                   # The number of last visible frames
   save_result: True
   show_inference: False

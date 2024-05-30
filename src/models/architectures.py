@@ -484,7 +484,7 @@ def model_creation(arch_type:str, weights:Union[str, dict] = "none", device:torc
     # Create the model following the architecture specified in the parameters
     arch_type = arch_type.lower()
 
-    print(f"Creating model with architecture: {arch_type}")
+    print(f"Creating FER model with architecture: {arch_type}")
     print(f"Using imagenet pre-trained weights: {pretrained}")
     print(f"Using custom weights of type {type(weights)}: {weights if isinstance(weights, str) else ''}")
     
@@ -537,7 +537,7 @@ def get_wandb_artifact(wandb_id:str, run:wandb.run = None, api:wandb.api = None)
     Returns:
         - str: The path to the downloaded artifact."""
     
-    print(f'Using trained model: {wandb_id}')
+    print(f'Using FER trained model: {wandb_id}')
     try: # Try to download the model weights from name
         if not wandb_id.startswith("armand-07/TFG Facial Emotion Recognition/model_"):
             full_wandb_id = "armand-07/TFG Facial Emotion Recognition/model_" + wandb_id + ":latest"

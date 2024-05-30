@@ -85,7 +85,7 @@ def load_YOLO_model_face_recognition(device:torch.device, size:str = "medium",  
         - model (ultralytics.YOLO): YOLO model for face recognition
     """
     assert device is not None, "Please specify the device to use for the model."
-    
+    print("Loading YOLO trained model for face recognition with size: ", size)
     model_name = None
     if size == "nano":
         model_name = "yolov8n-face.pt"
