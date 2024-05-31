@@ -40,8 +40,7 @@ def eval_video(annotations:str, cap:cv2.VideoCapture, name: str, face_model: ult
     IoU_threshold = float(params['IoU_threshold'])
     
     if params['tracking']:
-        people_tracked = dict()
-        people_tracked[-1] = [torch.ones(NUMBER_OF_EMOT).to(device)] # If no tracking id, it returns a uniform distribution
+        people_tracked = arch_v.init_people_tracked(device, params['window_size']) # Initialize the emotion tracker
     else:
         people_tracked = None
     # Iterate over each frame of the video
@@ -87,7 +86,7 @@ def eval_video(annotations:str, cap:cv2.VideoCapture, name: str, face_model: ult
                     total_emotion_detections += emotion_detections
                     if emotion_detections > 0: # If there are bbox_preds with GT label with label != 8 (that is the label "DNC" (Do Not Care))
                         processed_preds = processed_preds[bbox_idx_max_iou] # Get the processed predictions of the GT bboxes with IoU above the threshold
-                        processed_preds = arch.get_distributions(processed_preds) # Get the distributions of the predictions
+                        processed_preds = arch.get_distributions(processed_preds).cpu() # Get the distributions of the predictions
                         # Compute loss
                         total_loss += criterion(processed_preds, GT_labels).item()
                         # Compute the accuracy
@@ -148,7 +147,7 @@ def eval_model_on_videos(annotations_path:str, video_dir:str, params:dict, run: 
         else: # Analize the video
             print(f'Analizing video {video_filename}')
             if params['tracking'] and not first_execution: # If tracking is enabled, it needs to restart the tracking by realoading the face model
-                    face_model = arch_v.load_YOLO_model_face_recognition(size = params['face_detector_size'], device = device)
+                face_model = arch_v.load_YOLO_model_face_recognition(size = params['face_detector_size'], device = device)
             df_video = df_annotations[df_annotations['filename'] == video_filename].set_index('frame')
             total_frames += df_video.shape[0] # Update the total number of frames based on the number of frames annotated in the video
 

@@ -451,23 +451,22 @@ def postprocessing_inference(people_tracked:torch.Tensor, preds:torch.Tensor, bb
     elif saving_prediction == 'distrib':
         preds = arch.get_distributions(preds) # Normalize the output to ensure it is 0-1
 
-    output_preds = torch.zeros((preds.shape[0], NUMBER_OF_EMOT)).to(device)
-    # Update the people tracked based on bbox ids and new pred, delete the last element of the tensor. It is added 1 to bbox_ids as 0 is special id for unknown tracking
-    people_tracked[bbox_ids] = torch.cat((preds.unsqueeze(1), people_tracked[bbox_ids, :-1]), dim = 1)
-    
     if mode == 'standard':
-        output_preds = preds
+        return people_tracked, preds
+    
     elif mode == 'temporal_average':
+        output_preds = torch.zeros((preds.shape[0], NUMBER_OF_EMOT)).to(device)
+        # Update the people tracked based on bbox ids and new pred, delete the last element of the tensor. It is added 1 to bbox_ids as 0 is special id for unknown tracking
+        people_tracked[bbox_ids] = torch.cat((preds.unsqueeze(1), people_tracked[bbox_ids, :-1]), dim = 1)
         output_preds = torch.mean(people_tracked[bbox_ids], dim = 1) # Compute mean accross each output logit
+        
+        if saving_prediction == 'logits':
+            pass
+        elif saving_prediction == 'distrib':
+            output_preds = torch.divide(output_preds, torch.sum(output_preds, dim=1, keepdim=True))  # Normalize the output to ensure it is 0-1 (as in init there may be norm preds with 0 init vectors)
+        return people_tracked, output_preds
     else:
-        raise ValueError(f"Invalid mode given for postprocessing inference: {mode}")
-    
-    if saving_prediction == 'logits':
-        pass
-    elif saving_prediction == 'distrib':
-        output_preds = torch.divide(output_preds, torch.sum(output_preds, dim=1, keepdim=True))  # Normalize the output to ensure it is 0-1 (as in init there may be norm preds with 0 init vectors)
-    
-    return people_tracked, output_preds
+            raise ValueError(f"Invalid mode given for postprocessing inference: {mode}")
     
 
 

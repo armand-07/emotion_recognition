@@ -10,7 +10,8 @@ RAW_DATA_DIR = os.path.join(DATA_DIR, "raw")
 INTERIM_DATA_DIR = os.path.join(DATA_DIR, "interim")
 INFERENCE_DIR = os.path.join(ROOT_DIR, "inference")
 
-AFFECTNET_DIR = os.path.normpath("/mnt/gpid08/datasets/affectnet/") # substitute with the actual data path
+#AFFECTNET_DIR = os.path.normpath("/mnt/gpid08/datasets/affectnet/") # substitute with the actual data path
+AFFECTNET_DIR = os.path.join(DATA_DIR, "affectnet")
 RAW_AFFECTNET_DIR =  os.path.join(AFFECTNET_DIR, "raw") 
 INTERIM_AFFECTNET_DIR = os.path.join(AFFECTNET_DIR, "interim")
 PROCESSED_AFFECTNET_DIR = os.path.join(AFFECTNET_DIR, "processed")
