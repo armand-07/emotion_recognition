@@ -139,6 +139,7 @@ def load_video_models(wandb_id:str, face_detector_size:str = "medium", view_emot
         emotion_model, _ = arch.model_creation(params['arch'], local_artifact['state_dict'], device)
     else:
         emotion_model, device = arch.model_creation(params['arch'], local_artifact['state_dict'])
+        torch.cuda.set_device("cuda:0")
     emotion_model.eval()
     # Load the face transforms
     face_transforms = data_transforms(only_normalize = True, image_norm = params['image_norm'], resize = True)
@@ -156,8 +157,8 @@ def load_video_models(wandb_id:str, face_detector_size:str = "medium", view_emot
 
 def transform_bbox_to_square(bboxes: torch.Tensor, img_width:int, img_height:int) -> torch.Tensor:
     """Converts the input bbox to a square bbox centered in the same position as before. If the bounding box exceeds 
-    the image's limit it clips it to the image's limit (so the bbox is no longer 1:1). The returned bbox format is [x, y, w, h], where x,y are the 
-    coordinates of the top-left corner.
+    the image's limit it clips it to the image's limit (so the bbox is no longer 1:1). The returned bbox format is [x, y, w, h], 
+    where x,y are the coordinates of the top-left corner.
     Params:
         - bboxes(torch.Tensor): Bounding boxes in the format [x, y, w, h]. Expects the coordinates of the center of the bbox 
             and its width and height if the x,y were in top left. The shape is [n, 4], where n is the number of bboxes.
@@ -256,7 +257,6 @@ def track_faces_YOLO(img:np.array, pretrained_model:ultralytics.YOLO, format:str
         - bbox_ids (torch.Tensor): Id of the detected faces. The track ids starts in id 1.
         - conf (torch.Tensor): Confidence of the detection
     """
-    # Make inference
     results = pretrained_model.track(img, verbose = verbose, persist=True, device = device) # Persist the tracking between frames botsort
     # Get confidence of detection and id of bbox
     conf = results[0].boxes.conf.cpu()

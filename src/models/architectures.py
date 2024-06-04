@@ -462,7 +462,7 @@ def model_creation(arch_type:str, weights:Union[str, dict] = "none", device:torc
     """
     if device is None: # If device is not provided by the user, instanciate it
         assert torch.cuda.is_available()
-        device = torch.device("cuda")
+        device = torch.device("cuda:0")
         print(f'Using CUDA with {torch.cuda.device_count()} GPUs')
         print(f'Using CUDA device:{torch.cuda.get_device_name(torch.cuda.current_device())}')
 

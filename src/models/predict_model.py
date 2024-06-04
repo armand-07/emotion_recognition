@@ -344,7 +344,7 @@ def main(mode: str, input_path: str, output_dir:str, cpu:bool, camera_id:int) ->
 
     # Start with inference
     if mode == 'stream':
-        cap = cv2.VideoCapture(camera_id)
+        cap = cv2.VideoCapture(camera_id, cv2.CAP_FFMPEG, [cv2.CAP_PROP_HW_ACCELERATION, cv2.VIDEO_ACCELERATION_D3D11])
         infer_stream(cap, face_model, emotion_model, device, face_transforms, EMOT_COLORS_RGB, params)
 
     elif mode == 'screen':
