@@ -103,6 +103,7 @@ def load_YOLO_model_face_recognition(device:torch.device, size:str = "medium",  
         download_YOLO_model_face_recognition(size=size, directory=directory)
 
     # Load the model
+    print("The face model is loaded with CUDA:", ultralytics.utils.checks.cuda_is_available())
     model = ultralytics.YOLO(model_path).to(device)
     
     return model
