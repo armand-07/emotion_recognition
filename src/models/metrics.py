@@ -314,8 +314,10 @@ def save_val_wandb_metrics(acc1:torcheval.metrics, acc2:torcheval.metrics, val_l
     # Compute the metrics
     acc1 = acc1.compute().item()
     acc2 = acc2.compute().item()
+    all_targets_long = all_targets.long() # Convert to int64
+    all_preds_labels_long = all_preds_labels.long() # Convert to int64
     global_epoch_loss = global_epoch_loss /(len(val_loader) * batch_size) # Mean loss
-    f1_score = multiclass_f1_score(input=all_preds_labels, target=all_targets, num_classes=NUMBER_OF_EMOT, average = 'micro').item() # F1-Score
+    f1_score = multiclass_f1_score(input=all_preds_labels_long, target=all_targets_long, num_classes=NUMBER_OF_EMOT, average = 'macro').item() # F1-Score
     cohen_kappa = cohen_kappa_score(all_targets, all_preds_labels) # Cohen Kappa coefficient
 
     # ROC AUC score with OvR strategy
@@ -399,7 +401,9 @@ def save_val_wandb_metrics_dist(acc1:torcheval.metrics, acc2:torcheval.metrics, 
     acc1 = acc1.compute().item()
     acc2 = acc2.compute().item()
     global_epoch_loss = global_epoch_loss /(len(val_loader) * batch_size) # Mean loss
-    f1_score = multiclass_f1_score(input=all_preds_labels, target=all_targets, num_classes=NUMBER_OF_EMOT, average = 'micro').item() # F1-Score
+    all_targets_long = all_targets.long() # Convert to int64
+    all_preds_labels_long = all_preds_labels.long() # Convert to int64
+    f1_score = multiclass_f1_score(input=all_preds_labels_long, target=all_targets_long, num_classes=NUMBER_OF_EMOT, average = 'macro').item() # F1-Score
     cohen_kappa = cohen_kappa_score(all_targets, all_preds_labels) # Cohen Kappa coefficient
     global_cosine_sim = global_cosine_sim / (len(val_loader) * batch_size) # all batches have same size
 
@@ -493,7 +497,10 @@ def save_video_test_wandb_metrics(global_sum_loss:float, total_GTs:int, total_ob
 
     unique_labels = np.unique(np.concatenate((GT_labels, preds_labels))) # Only report on labels that appear in the data
 
-    f1_score = multiclass_f1_score(input=preds_labels, target=GT_labels, num_classes=NUMBER_OF_EMOT, average = 'macro').item() # F1-Score
+    GT_labels_long = GT_labels.long() # Convert to int64
+    preds_labels_long = preds_labels.long() # Convert to int64
+
+    f1_score = multiclass_f1_score(input=preds_labels_long, target=GT_labels_long, num_classes=NUMBER_OF_EMOT, average = 'macro').item() # F1-Score
     chart_precision_recall = compute_multiclass_precision_recall(GT_labels, preds_labels, unique_labels)
     chart_f1_score = compute_multiclass_f1_score(GT_labels, preds_labels, unique_labels)
 

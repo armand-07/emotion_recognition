@@ -17,7 +17,7 @@ from codecarbon import EmissionsTracker
 import wandb
 from wandb.sdk import wandb_run
 
-from src import MODELS_DIR
+from src import MODELS_DIR, NUMBER_OF_EMOT
 from src.data.dataset import create_dataloader
 from src.models import architectures as arch
 from src.models.metrics import save_val_wandb_metrics, save_val_wandb_metrics_dist
@@ -46,7 +46,7 @@ def train(train_loader: DataLoader, model: torch.nn.Module, criterion: torch.nn,
     model.train()
     # Stablish some metrics to be saved during training
     global_epoch_loss = torch.zeros(1, dtype=torch.float, device = device)
-    acc = MulticlassAccuracy(device=device)
+    acc = MulticlassAccuracy(device=device, average = 'macro', num_classes = NUMBER_OF_EMOT)
     
     for i, (imgs, cat_target, _) in tqdm(enumerate(train_loader), total=len(train_loader),
                                                     desc = f'(TRAIN)Epoch {epoch+1}', 
@@ -107,7 +107,7 @@ def train_distillation(train_loader: DataLoader, model_student: torch.nn.Module,
     
     # Stablish some metrics to be saved during training
     global_epoch_loss = torch.zeros(1, dtype=torch.float, device = device)
-    acc = MulticlassAccuracy(device=device)
+    acc = MulticlassAccuracy(device=device, average = 'macro', num_classes = NUMBER_OF_EMOT)
     cos_sim = nn.CosineSimilarity(dim=1, eps=1e-6)
     global_cosine_sim = torch.zeros(1, dtype=torch.float, device = device)
     
@@ -173,8 +173,12 @@ def validate(val_loader: DataLoader, model: torch.nn.Module, criterion: torch.nn
     """
     model.eval() # switch model to evaluate mode
     # Stablish some metrics to be saved during validation
-    acc1 = MulticlassAccuracy(device=device)
-    acc2 = MulticlassAccuracy(device=device, k = 2)
+    if test: 
+        acc1 = MulticlassAccuracy(device=device)
+        acc2 = MulticlassAccuracy(device=device, k = 2)
+    else:
+        acc1 = MulticlassAccuracy(device=device, average = 'macro', num_classes = NUMBER_OF_EMOT)
+        acc2 = MulticlassAccuracy(device=device, k = 2, average = 'macro', num_classes = NUMBER_OF_EMOT)
     all_preds_labels = torch.empty(0, device = 'cpu')
     all_preds_distrib = torch.empty(0, device = 'cpu')
     all_targets = torch.empty(0, device = 'cpu')
@@ -209,7 +213,7 @@ def validate(val_loader: DataLoader, model: torch.nn.Module, criterion: torch.nn
                 tqdm.write(f'VAL [{i+1}/{len(val_loader)}], Batch accuracy: {acc_batch:.2f}%; Batch Loss: {loss.item():.3f}')
         # Compute metrics
         metrics = save_val_wandb_metrics(acc1, acc2, val_loader, batch_size, all_targets, all_preds_distrib,
-                                 all_preds_labels, global_epoch_loss, epoch, run)
+                                 all_preds_labels, global_epoch_loss, epoch, run, test)
     return metrics
 
 
@@ -234,8 +238,12 @@ def validate_distillation(val_loader: DataLoader, model: torch.nn.Module, criter
     """
     model.eval() # switch model to evaluate mode
     # Stablish some metrics to be saved during validation
-    acc1 = MulticlassAccuracy(device=device)
-    acc2 = MulticlassAccuracy(device=device, k = 2)
+    if test: 
+        acc1 = MulticlassAccuracy(device=device)
+        acc2 = MulticlassAccuracy(device=device, k = 2)
+    else:
+        acc1 = MulticlassAccuracy(device=device, average = 'macro', num_classes = NUMBER_OF_EMOT)
+        acc2 = MulticlassAccuracy(device=device, k = 2, average = 'macro', num_classes = NUMBER_OF_EMOT)
     all_preds_labels = torch.empty(0, device = 'cpu')
     all_preds_dist = torch.empty(0, device = 'cpu')
     all_targets = torch.empty(0, device = 'cpu')
