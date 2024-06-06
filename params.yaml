@@ -6,30 +6,30 @@ preprocessing:
 
 training:
   random_seed: 33 #seed for reproducibility
-  daug_p_value: 0.5
-  daug_horizontalflip: True
+  daug_p_value: 0.7448959260828931
+  daug_horizontalflip: False
   daug_shiftscalerotate: True
   daug_coarsedropout: True
-  daug_colorjitter: True
+  daug_colorjitter: False
   daug_gaussnoise: True
-  image_norm: "ImageNet"
+  image_norm: "affectnet"
 
-  distillation : False 
-  alpha: 0.5
-  decaying_strategy: 0
-  embedding_method: "both"
-  arch: "vit" # architecture name
-  teacher_arch: "efficientnet_b2"
+  distillation : True 
+  alpha: 0.587282684592565
+  decaying_strategy: "0"
+  embedding_method: "class"
+  arch: "deit_tiny" # architecture name
+  teacher_arch: "poster"
   pretraining: "imagenet"
-  batch_size: 224 # training and valid batch size
-  epoch_samples: original # number of samples considered as one epoch, if None, the whole dataset length is considered
+  batch_size: 64 # training and valid batch size
+  epoch_samples: "original" # number of samples considered as one epoch, if None, the whole dataset length is considered
   weighted_sampler_train: False
   weighted_sampler_val: False
   weighted_loss: True
-  label_smoothing: 0.0
+  label_smoothing: 0.04800825159456205
 
-  lr: '1e-7' # learning rate
-  momentum: 0.9 # SGD momentum, for SGD only
+  lr: 0.0000075 # learning rate
+  momentum: "none" # SGD momentum, for SGD only
   optimizer: 'adamw' # optimization method: sgd | adam
   epochs: 30  # maximum number of epochs to train
   patience: 5 # how many epochs of no loss improvement should we wait before stop training
