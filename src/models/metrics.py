@@ -1,5 +1,7 @@
 import pandas as pd
 from typing import Tuple
+import time
+from tqdm import tqdm
 
 import torch
 from torch.utils.data import DataLoader
@@ -7,6 +9,7 @@ import torcheval.metrics
 from torcheval.metrics.functional import multiclass_f1_score
 import numpy as np
 from sklearn.metrics import roc_auc_score, confusion_matrix, cohen_kappa_score, classification_report, f1_score
+
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -528,3 +531,31 @@ def save_video_test_wandb_metrics(global_sum_loss:float, total_GTs:int, total_ob
             "Average Precision of face detector": ap,
             "PR Curve of face detector": wandb.Image(PR_curve)
             }, step=0, commit=True)
+    
+
+def eval_throughput(dataloader_test, model, device, batch_size):
+    # Set the model to evaluation
+    model.eval()
+    starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+    repetitions = len(dataloader_test)
+    print(f"Running {repetitions} repetitions...")
+    timings=np.zeros((repetitions,1))
+    with torch.no_grad():
+        for i, (imgs, cat_target, _) in tqdm(enumerate(dataloader_test), 
+                                                       total=len(dataloader_test)):
+            imgs = imgs.to(device)
+            torch.cuda.synchronize()
+            starter.record()
+            _ = model(imgs)
+            ender.record()
+            # WAIT FOR GPU SYNC
+            torch.cuda.synchronize()
+            curr_time = starter.elapsed_time(ender)
+            timings[i] = curr_time
+            
+        mean_latency = np.sum(timings) / len(dataloader_test)
+
+        throughput = batch_size / (mean_latency/1000)  # Compute throughput
+
+        print(f"Mean latency: {mean_latency:.4f} ms")
+        print(f"Throughput: {throughput:.2f} faces per second")

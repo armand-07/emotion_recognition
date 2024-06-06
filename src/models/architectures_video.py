@@ -134,7 +134,10 @@ def load_video_models(wandb_id:str, face_detector_size:str = "medium", view_emot
         map_location = torch.device('cpu')
     local_artifact = torch.load(os.path.join(artifact_dir, "model_best.pt"), map_location=map_location)
     params = local_artifact["params"]
-    distilled_model = params['distillation']
+    if 'distillation' in params:
+        distilled_model = params['distillation']
+    else:
+        distilled_model = False
     if cpu_device:
         device = torch.device('cpu')
         emotion_model, _ = arch.model_creation(params['arch'], local_artifact['state_dict'], device)

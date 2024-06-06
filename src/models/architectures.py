@@ -557,6 +557,8 @@ def get_wandb_artifact(wandb_id:str, run:wandb.run = None, api:wandb.api = None)
         artifact = run.use_artifact(full_wandb_id, type = "model")
     elif api is not None:
         artifact = api.artifact(full_wandb_id, type = "model")
+    else:
+        raise ValueError("Either run or api should be provided to download the artifact")
 
     # Download artifact and load params
     artifact_dir = artifact.download()
