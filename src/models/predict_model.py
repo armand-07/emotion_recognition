@@ -62,7 +62,7 @@ def infer_screen(face_model:ultralytics.YOLO, emotion_model: torch.nn.Module, de
             cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu')
         else:
             cls_weight = None
-        frame = plot_bbox_emot(frame, faces_bbox, labels, ids, cls_weight, bbox_format ="xywh", display = False, color_list = EMOT_COLORS_RGB)
+        frame = plot_bbox_emot(frame, faces_bbox, labels, ids, cls_weight, bbox_format ="xywh-center", display = False, color_list = EMOT_COLORS_RGB)
         # Display the mean sentiment of the people in the frame
         if params['show_mean_emotion_distrib']:
                 frame, fig_distrib, ax_distrib, distribution_container = plot_mean_emotion_distribution(frame, processed_preds, params['saving_prediction'],

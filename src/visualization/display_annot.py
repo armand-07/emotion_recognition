@@ -172,8 +172,10 @@ def plot_mean_emotion_evolution(img:np.array, output_preds: torch.Tensor, last_m
         ax.set_ylim([0.0, 1.0])
         ax.grid(axis = 'y', linestyle = '--', linewidth = 0.5, color = 'black')
         ax.set_xlabel('Past frames', fontsize=int(12*(max_length/1920)))
+        ax.set_xlim([0, numpy_mean_emotions.shape[1]-1])
         ax.invert_xaxis()
         ax.set_title('Mean emotion confidence evolution for detections', fontsize=int(16*(max_length/1920)))
+        ax.legend(line_container, AFFECTNET_CAT_EMOT, loc='upper left')
         # Set the font size for the tick labels
         plt.xticks(fontsize=int(9*(max_length/1920)))
         plt.yticks(fontsize=int(9*(max_length/1920)))
