@@ -278,7 +278,7 @@ def plot_PR_curve(precisions: torch.Tensor, recalls: torch.Tensor, AP: float, Io
     sns.lineplot(x=recall_values, y=precision_values, ax=ax, linewidth=2.0)
 
     # Set the title and labels
-    ax.set_title(f"PR Curve with IoU {IoU_threshold:.2f}, (AP = {AP:.2f})")
+    ax.set_title(f"PR Curve, (AP@{IoU_threshold:.2f} = {AP:.2f})")
     ax.set_xlabel("Recall")
     ax.set_ylabel("Precision")
 
@@ -532,6 +532,7 @@ def save_video_test_wandb_metrics(global_sum_loss:float, total_GTs:int, total_ob
             "PR Curve of face detector": wandb.Image(PR_curve)
             }, step=0, commit=True)
     
+
 
 def eval_throughput(dataloader_test, model, device, batch_size):
     # Set the model to evaluation
