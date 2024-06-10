@@ -43,13 +43,14 @@ eval:
 
 
 inference:
-  wandb_id_emotion_model: "sage-sweep-9"  # Wandb id of selected model
-  face_detector_size: "medium"              # "nano" | "medium" | "large"
+  wandb_id_emotion_model: "hardy-water-969"  # Wandb id of selected model
+  face_detector_size: "nano"              # "nano" | "medium" | "large"
   face_threshold: 0.25
+  emotion_threshold: 0.4
   tracking: True
   saving_prediction: "distrib"            # "logits" | "distrib"
-  postprocessing: "standard"      # "standard" | "temporal_average" 
-  window_size: 3
+  postprocessing: "temporal_average"      # "standard" | "temporal_average" 
+  window_size: 5
   distilled_model_out_method: "class"     # "class" | "distill" | "both" : only used in distilled models;
   show_mean_emotion_distrib: False
   show_mean_emotion_evolution: True
@@ -60,14 +61,14 @@ inference:
   variable_color: True
 
 
-
 test_video:
-  wandb_id_emotion_model: "sage-sweep-9"  # Wandb id of selected model
+  wandb_id_emotion_model: "hardy-water-969"  # Wandb id of selected model
   face_detector_size: "nano"              # "nano" | "medium" | "large"
-  face_threshold: 0.0
+  face_threshold: 0.25
+  emotion_threshold: 0.4
   tracking: True
   saving_prediction: "distrib"            # "logits" | "distrib"
-  postprocessing: "temporal_average"      # "standard" | "temporal_average" 
-  window_size: 3
+  postprocessing: "temporal_average"      # "standard" | "temporal_average"
+  window_size: 5
   distilled_model_out_method: "class"     # "class" | "distill" | "both" : only used in distilled models;
-  IoU_threshold: 0.7
+  IoU_threshold: 0.5

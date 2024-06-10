@@ -51,7 +51,7 @@ def create_figure_mean_emotion_evolution(height:int, width:int) -> Tuple[plt.fig
     # Precompute the plot size depending on image size
     max_length = max(height, width)
     dpi = 100 # Dots per inch, standard is 100
-    width_in = (max_length/2)/ dpi
+    width_in = (max_length/3)/ dpi
     height_in = (max_length/4) / dpi
     fig, ax = plt.subplots(figsize=(width_in, height_in), dpi=dpi)
     distribution_container = None
@@ -175,7 +175,7 @@ def plot_mean_emotion_evolution(img:np.array, output_preds: torch.Tensor, last_m
         ax.set_xlim([0, numpy_mean_emotions.shape[1]-1])
         ax.invert_xaxis()
         ax.set_title('Mean emotion confidence evolution for detections', fontsize=int(16*(max_length/1920)))
-        ax.legend(line_container, AFFECTNET_CAT_EMOT, loc='upper left')
+        ax.legend(line_container, AFFECTNET_CAT_EMOT, loc='upper left', fontsize=int(12*(max_length/1920)))
         # Set the font size for the tick labels
         plt.xticks(fontsize=int(9*(max_length/1920)))
         plt.yticks(fontsize=int(9*(max_length/1920)))
@@ -229,7 +229,7 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
             if color_list is not None:
                 bbox_color = color_list[FROM_EMOT_TO_ID[labels[i]]]
         elif id == -1: # If bbox_ids is not None and the id is Unknown
-            text = 'Unknown' # Unknown detection as the bbox_id is -1
+            text = 'Unknown tracking' # Unknown detection as the bbox_id is -1
             bbox_color = (128, 128, 128) # Grey color in RGB
         else: # If bbox_ids is None
             text = str(int(i))+":"+labels[i]

@@ -428,7 +428,7 @@ def init_people_tracked(device:torch.device, window_size:int, preallocated_ids:i
     
 
 def postprocessing_inference(people_tracked:torch.Tensor, preds:torch.Tensor, bbox_ids:torch.Tensor, 
-                             device:torch.device, saving_prediction:str, mode:str = 'standard') -> Tuple[dict, torch.Tensor]:
+                             device:torch.device, saving_prediction:str, confident_pred:bool, emotion_threshold:float, mode:str = 'standard') -> Tuple[dict, torch.Tensor]:
     """Function to update the people_tracked with the new predictions and return the output predictions based 
     on the post processing mode. Depending on the saving_prediction parameter, it will save the predictions in logits 
     or in normalized version.
@@ -440,6 +440,8 @@ def postprocessing_inference(people_tracked:torch.Tensor, preds:torch.Tensor, bb
         - bbox_ids (torch.Tensor): The ids of the faces. It has shape [D].
         - device (torch.device): The device to be used.
         - saving_prediction (str): The method to save the predictions. It can be 'logits' or 'distrib'.
+        - confident_pred (bool): If True, it will only save the predictions that have the list full. 
+        - emotion_threshold (float): The threshold to be used for the emotion prediction.
         - mode (str): The mode to be used for the postprocessing. It can be 'standard' or 'temporal_average'.
     Returns:
         - torch.Tensor: The updated people_tracked. It has the bbox_id as row and per each column the 
@@ -450,34 +452,43 @@ def postprocessing_inference(people_tracked:torch.Tensor, preds:torch.Tensor, bb
         return people_tracked, torch.zeros(1,NUMBER_OF_EMOT).to(device)
     
     assert saving_prediction in ['logits', 'distrib'], f"Invalid saving_prediction given: {saving_prediction}"
-    
+
     if saving_prediction == 'logits':
         pass
     elif saving_prediction == 'distrib':
         preds = arch.get_distributions(preds) # Normalize the output to ensure it is 0-1
+    
 
     if mode == 'standard':
         return people_tracked, preds
     
     elif mode == 'temporal_average':
-        output_preds = torch.zeros((preds.shape[0], NUMBER_OF_EMOT)).to(device)
+        processed_preds = torch.zeros((preds.shape[0], NUMBER_OF_EMOT)).to(device)
         # Update the people tracked based on bbox ids and new pred, delete the last element of the tensor. It is added 1 to bbox_ids as 0 is special id for unknown tracking
         people_tracked[bbox_ids] = torch.cat((preds.unsqueeze(1), people_tracked[bbox_ids, :-1]), dim = 1)
-        output_preds = torch.mean(people_tracked[bbox_ids], dim = 1) # Compute mean accross each output logit
-        
+        mean_preds = torch.mean(people_tracked[bbox_ids], dim = 1) # Compute mean accross each output logit
         if saving_prediction == 'logits':
-            pass
+            processed_preds = mean_preds
         elif saving_prediction == 'distrib':
-            output_preds = torch.divide(output_preds, torch.sum(output_preds, dim=1, keepdim=True))  # Normalize the output to ensure it is 0-1 (as in init there may be norm preds with 0 init vectors)
-        return people_tracked, output_preds
+            processed_preds = torch.divide(mean_preds, torch.sum(mean_preds, dim=1, keepdim=True))  # Normalize the output to ensure it is 0-1 (as in init there may be norm preds with 0 init vectors)
+            if confident_pred:
+                sum_not_one = (1 - torch.sum(mean_preds, dim=1)) > 1e-3 # Check if the sum is not one so the N previous predictions were not full
+                processed_preds[sum_not_one] =  torch.zeros(NUMBER_OF_EMOT).to(device) # If the sum is not one, it means the N previous predictions were not full, so it is set to -1
+                # Get the maximum value of output_preds along dimension 1
+                max_values = torch.max(processed_preds, dim=1)[0]
+                # Check if the maximum value is above the confidence threshold
+                under_threshold = max_values < emotion_threshold
+                # If the maximum value is not above the confidence threshold, set output_preds to -1
+                processed_preds[under_threshold] = torch.zeros(NUMBER_OF_EMOT).to(device)
+        return people_tracked, processed_preds
     else:
-            raise ValueError(f"Invalid mode given for postprocessing inference: {mode}")
+        raise ValueError(f"Invalid mode given for postprocessing inference: {mode}")
     
 
 
 
 def get_pred_from_frame(frame:np.array, face_model:ultralytics.YOLO, emotion_model:torch.nn.Module, device:torch.device, 
-                         face_transforms:albumentations.Compose, people_tracked: dict, params:dict, get_object_confidence:bool = False
+                         face_transforms:albumentations.Compose, people_tracked: dict, params:dict, get_confidences:bool = False
                          ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict]:
     """Function to get the predictions from a frame using the given models and hyperparameters. It returns the faces detected
     with the bbox represented in xywh-center, the labels of the model and the ids of the faces.
@@ -495,22 +506,33 @@ def get_pred_from_frame(frame:np.array, face_model:ultralytics.YOLO, emotion_mod
         - Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict]: The faces detected, the labels of the model and the 
         ids of the faces and the updated list of people detected.
     """
-    if get_object_confidence:
+    if get_confidences:
         faces_bbox, raw_preds, ids, object_confidence = get_raw_pred_from_frame(frame, face_model, emotion_model, params['distilled_model'], params['distilled_model_out_method'], 
-                                                 device, face_transforms, params['face_threshold'], params['tracking'], get_object_confidence)
+                                                 device, face_transforms, params['face_threshold'], params['tracking'], get_confidences)
     else:
         faces_bbox, raw_preds, ids = get_raw_pred_from_frame(frame, face_model, emotion_model, params['distilled_model'], params['distilled_model_out_method'], 
                                                  device, face_transforms, params['face_threshold'], params['tracking'])
     if params['tracking']:
         people_tracked, processed_preds = postprocessing_inference(people_tracked, raw_preds, ids, device,
-                                                                    params['saving_prediction'], params['postprocessing'])
+                                                                    params['saving_prediction'], params['confident_emotion_prediction'], 
+                                                                    params['emotion_threshold'], params['postprocessing'])
     else: 
         if params['postprocessing'] != 'standard': # If tracking is disabled, only standard postprocessing is allowed
             raise ValueError(f"Invalid postprocessing mode given: {params['postprocessing']}")
-        processed_preds = raw_preds
-    labels = arch.get_predictions(processed_preds)
+        if ids.shape[0] == 0: # If no faces are detected, return empty tensors
+            processed_preds = torch.zeros(1,NUMBER_OF_EMOT).to(device)
+        else:
+            processed_preds = raw_preds
+            if params['saving_prediction'] == 'distrib':
+                processed_preds = arch.get_distributions(processed_preds)
+    
+    if params['saving_prediction'] == 'logits':
+        labels = arch.get_predictions(processed_preds)
+    elif params['saving_prediction'] == 'distrib':
+        labels = arch.get_predictions_distrib(processed_preds)
 
-    if get_object_confidence:
+    if get_confidences:
         return faces_bbox, labels, ids, processed_preds, people_tracked, object_confidence
     else:
+
         return faces_bbox, labels, ids, processed_preds, people_tracked

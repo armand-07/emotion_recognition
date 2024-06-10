@@ -333,6 +333,8 @@ def main(mode: str, input_path: str, output_dir:str, cpu:bool, camera_id:int) ->
     face_model, emotion_model, distilled_model, face_transforms, device = arch_v.load_video_models(params['wandb_id_emotion_model'], params['face_detector_size'], 
                                                                                                    params['view_emotion_model_attention'], cpu)
     params['distilled_model'] = distilled_model
+    if params['emotion_threshold'] > 0:
+        params['confident_emotion_prediction'] = True # To avoid predictions when the number of frames in not full
     
     if params['variable_color']: # If the color of the emotions is variable, it needs to be converted to RGB
         # Convert color names to RGB values

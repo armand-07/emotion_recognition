@@ -185,6 +185,45 @@ def compute_multiclass_precision_recall(all_targets:torch.Tensor, all_preds_labe
 
 
 
+def compute_multiclass_precision_recall2(labels_confusion: torch.Tensor) -> plt.Figure:
+    """Compute the precision and recall for the model per class and then returns the resulting plot.
+    Params:
+        - all_targets (torch.Tensor): The tensor with all the targets.
+        - all_preds_labels (torch.Tensor): The tensor with all the predictions in label form.
+        - unique_labels (np.array): The array with the unique labels in the data.
+    Returns:
+        - fig (plt.Figure): The figure with the plots of the precision and recall for each class.
+    """
+    # Find unique class labels
+    precision = labels_confusion[:,0] / (labels_confusion[:,0]+labels_confusion[:,1]) # TP/TP+FP
+    precision = np.nan_to_num(precision.numpy(), nan=0.0) # Replace NaN with 0
+    recall = labels_confusion[:,0] / (labels_confusion[:,0]+labels_confusion[:,2]) # TP/TP+FN
+    recall = np.nan_to_num(recall.numpy(), nan=0.0) # Replace NaN with 0
+    
+    print(labels_confusion)
+
+    x = np.arange(NUMBER_OF_EMOT)  # the label locations
+    width = 0.35  # the width of the bars
+
+    fig, ax = plt.subplots()
+    ax.bar(x - width/2, precision, width, label='Precision', color='sandybrown')
+    ax.bar(x + width/2, recall, width, label='Recall', color='cornflowerblue')
+
+    # Add some text for labels, title and custom x-axis tick labels, etc.
+    ax.set_ylabel('Scores')
+    ax.set_ylim([0.0, 1.0])
+    ax.grid(axis = 'y', linestyle = '--', linewidth = 0.5, color = 'black')
+    ax.set_title('Precision and Recall by emotion class')
+    ax.set_xlabel('Emotion classes')
+    ax.set_xticks(x)
+    ax.set_xticklabels(AFFECTNET_CAT_EMOT)
+    ax.legend()
+
+    fig.tight_layout()
+    return fig
+
+
+
 def compute_multiclass_f1_score(all_targets:torch.Tensor, all_preds_labels:torch.Tensor, unique_labels: np.array = None) -> plt.Figure:
     """Compute the F1 score for each class in a multiclass classification problem. 
     Params:
@@ -465,11 +504,11 @@ def save_val_wandb_metrics_dist(acc1:torcheval.metrics, acc2:torcheval.metrics, 
 
 
 
-def save_video_test_wandb_metrics(global_sum_loss:float, total_GTs:int, total_object_detections:int, total_emotion_detections:int,
+def save_video_test_wandb_metrics(total_GTs:int, total_object_detections:int, total_emotion_detections:int,
                                     total_inference_time:float, total_inference_time_people:float, total_frames:int,
                                     GT_labels:torch.Tensor, preds_labels:torch.Tensor, obj_pred_conf:torch.Tensor,
                                     obj_TP_preds:torch.Tensor, acc1:torcheval.metrics, acc2:torcheval.metrics, 
-                                    run: wandb.run, params:dict) -> dict:
+                                    labels_confusion: torch.Tensor, run: wandb.run, params:dict, ) -> dict:
     """Save the validation metrics in Weights and Biases for the model when distillilation is applied.
     Params:
         - global_sum_loss (float): The global loss for the epoch.
@@ -485,13 +524,13 @@ def save_video_test_wandb_metrics(global_sum_loss:float, total_GTs:int, total_ob
         - obj_TP_preds (torch.Tensor): The tensor with all the predictions of True Positives.
         - acc1 (torch.metrics): The accuracy metric for the model.
         - acc2 (torch.metrics): The top-2 accuracy metric for the model.
+        - labels_confusion (torch.Tensor): The tensor with the labels for the confusion matrix.
         - run (wandb.run): The Weights and Biases run object.
         - params (dict): The dictionary with the parameters for the run.
     Returns:
         - metrics (dict): The dictionary with the metrics to be saved locally when saving the model.
     """
     # Compute the metrics
-    global_mean_loss = global_sum_loss / total_emotion_detections
     inference_time = total_inference_time / total_frames
     inference_time_people = total_inference_time_people / total_emotion_detections
 
@@ -504,7 +543,8 @@ def save_video_test_wandb_metrics(global_sum_loss:float, total_GTs:int, total_ob
     preds_labels_long = preds_labels.long() # Convert to int64
 
     f1_score = multiclass_f1_score(input=preds_labels_long, target=GT_labels_long, num_classes=NUMBER_OF_EMOT, average = 'macro').item() # F1-Score
-    chart_precision_recall = compute_multiclass_precision_recall(GT_labels, preds_labels, unique_labels)
+    #chart_precision_recall = compute_multiclass_precision_recall(GT_labels, preds_labels, unique_labels)
+    chart_precision_recall = compute_multiclass_precision_recall2 (labels_confusion)
     chart_f1_score = compute_multiclass_f1_score(GT_labels, preds_labels, unique_labels)
 
     # Log the confusion matrix
@@ -512,11 +552,10 @@ def save_video_test_wandb_metrics(global_sum_loss:float, total_GTs:int, total_ob
     chart_conf_matrix = vis.create_conf_matrix(conf_matrix, unique_labels)
 
     # Log object detection AP and PR curve
-    ap, precisions, recalls = compute_AP (obj_pred_conf, obj_TP_preds, total_GTs)
-    PR_curve = plot_PR_curve(precisions, recalls, ap, params['IoU_threshold'])
+    #ap, precisions, recalls = compute_AP (obj_pred_conf, obj_TP_preds, total_GTs)
+    #PR_curve = plot_PR_curve(precisions, recalls, ap, params['IoU_threshold'])
 
-    run.log({"Global Mean Loss": global_mean_loss,
-            "Total GTs": total_GTs,
+    run.log({"Total GTs": total_GTs,
             "Total Object detections": total_object_detections,
             "Total Emotion detections": total_emotion_detections,
             "Inference time per frame": inference_time,
@@ -528,8 +567,8 @@ def save_video_test_wandb_metrics(global_sum_loss:float, total_GTs:int, total_ob
             "Plot Precision and Recall by class": wandb.Image(chart_precision_recall),
             "Plot F1-Score by class": wandb.Image(chart_f1_score),
             "Confusion Matrix": chart_conf_matrix,
-            "Average Precision of face detector": ap,
-            "PR Curve of face detector": wandb.Image(PR_curve)
+            #"Average Precision of face detector": ap,
+            #"PR Curve of face detector": wandb.Image(PR_curve)
             }, step=0, commit=True)
     
 

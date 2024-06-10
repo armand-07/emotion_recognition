@@ -15,7 +15,7 @@ import ultralytics
 import albumentations
 import wandb
 
-from src import TEST_VIDEO_DIR, NUMBER_OF_EMOT
+from src import TEST_VIDEO_DIR, NUMBER_OF_EMOT, FROM_EMOT_TO_ID
 from src.models import architectures as arch
 from src.models.metrics import save_video_test_wandb_metrics
 from src.models import architectures_video as arch_v
@@ -27,11 +27,10 @@ from config import wandbAPIkey
 
 def eval_video(annotations:str, cap:cv2.VideoCapture, name: str, face_model: ultralytics.YOLO, emotion_model: torch.nn.Module, 
                device: torch.device, face_transforms: albumentations.Compose, params:dict,
-               criterion: torch.nn , acc1:MulticlassAccuracy, acc2:MulticlassAccuracy,
+               acc1:MulticlassAccuracy, acc2:MulticlassAccuracy, labels_confusion:torch.Tensor
                ) -> Tuple[float, float, int, int, float, float, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, 
                           MulticlassAccuracy, MulticlassAccuracy]:
     # Define metrics
-    total_loss = 0.0
     total_GTs, total_object_detections, total_emotion_detections = 0, 0, 0 # total_detections should be less than GT_people 
     sum_inference_time, sum_inference_time_people = 0.0 , 0.0
     all_GT_labels, all_preds_labels = torch.empty(0, device = 'cpu', dtype = torch.long), torch.empty(0, device = 'cpu', dtype = torch.long)
@@ -55,7 +54,7 @@ def eval_video(annotations:str, cap:cv2.VideoCapture, name: str, face_model: ult
                 # Get the predictions from the frame
                 start = time.time()
                 faces_bbox, labels, ids, processed_preds, people_tracked, object_confidence = arch_v.get_pred_from_frame(frame, face_model, emotion_model, device, 
-                                                                                                    face_transforms, people_tracked, params, get_object_confidence = True)
+                                                                                                    face_transforms, people_tracked, params, get_confidences = True)
                 end = time.time()
 
                 # Update metrics
@@ -86,21 +85,53 @@ def eval_video(annotations:str, cap:cv2.VideoCapture, name: str, face_model: ult
                     total_emotion_detections += emotion_detections
                     if emotion_detections > 0: # If there are bbox_preds with GT label with label != 8 (that is the label "DNC" (Do Not Care))
                         processed_preds = processed_preds[bbox_idx_max_iou] # Get the processed predictions of the GT bboxes with IoU above the threshold
-                        processed_preds = arch.get_distributions(processed_preds).cpu() # Get the distributions of the predictions
-                        # Compute loss
-                        total_loss += criterion(processed_preds, GT_labels).item()
+                        labels = labels[bbox_idx_max_iou] # Get the labels of the GT bboxes with IoU above the threshold with not DNC label
+                        if type(labels) != list: # If the labels are not a list, convert it to a list
+                            labels = [labels]
+                        if params['saving_prediction'] == 'logits':
+                            processed_preds = arch.get_distributions(processed_preds).cpu() # Get the distributions of the predictions
+                        elif params['saving_prediction'] == 'distrib':
+                            processed_preds = processed_preds.cpu()
                         # Compute the accuracy
                         acc1.update(processed_preds, GT_labels)
                         acc2.update(processed_preds, GT_labels)
                         # Concatenate the labels
                         all_GT_labels = torch.cat((all_GT_labels, GT_labels), dim = 0)
                         all_preds_labels = torch.cat((all_preds_labels, torch.argmax(processed_preds, dim = 1).long()), dim = 0)
+                        labels = torch.tensor([FROM_EMOT_TO_ID[label] for label in labels], dtype=torch.int)
+                        # True Positives: Detected as emotion and present in GT
+                        TP = torch.eq(GT_labels, labels)
+                        labels_TP = GT_labels[TP]
+                        counts_TP = torch.bincount(labels_TP)
+                        padding = torch.zeros(labels_confusion.size(0) - counts_TP.size(0), dtype=labels_confusion.dtype)
+                        counts_TP = torch.cat([counts_TP, padding])
+                        labels_confusion[:, 0] += counts_TP
+                        # False Negatives: Not detected as emotion but present in GT
+                        FN = (labels == 8) # Uncertain label
+                        labels_FN = GT_labels[FN]
+                        counts_FN = torch.bincount(labels_FN)
+                        padding = torch.zeros(labels_confusion.size(0) - counts_FN.size(0), dtype=labels_confusion.dtype)
+                        counts_FN = torch.cat([counts_FN, padding])
+                        labels_confusion[:, 2] += counts_FN
+                        # False Positives: Detected as emotion but not present in GT. Penalize the prediction as FP and the GT as FN
+                        FP = (~FN) & (~TP)
+                        labels_FP = labels[FP]
+                        labels_FN = GT_labels[FP]
+                        counts_FP = torch.bincount(labels_FP)
+                        counts_FN = torch.bincount(labels_FN)
+                        padding = torch.zeros(labels_confusion.size(0) - counts_FP.size(0), dtype=labels_confusion.dtype)
+                        counts_FP = torch.cat([counts_FP, padding])
+                        labels_confusion[:, 1] += counts_FP
+                        padding = torch.zeros(labels_confusion.size(0) - counts_FN.size(0), dtype=labels_confusion.dtype)
+                        counts_FN = torch.cat([counts_FN, padding])
+                        labels_confusion[:, 2] += counts_FN
+                        
                 else: # If no detection is found (id and bbox list empty), penalize only the face detector increasing total of GT detected and no IoU
                     sum_inference_time_people += end - start
         else: # Break the loop if video has ended
             break
 
-    return [total_loss, total_GTs, total_object_detections, total_emotion_detections,
+    return [total_GTs, total_object_detections, total_emotion_detections,
             sum_inference_time, sum_inference_time_people, 
             all_GT_labels, all_preds_labels, obj_pred_confidences, obj_TP_preds, acc1, acc2]
 
@@ -121,17 +152,19 @@ def eval_model_on_videos(annotations_path:str, video_dir:str, params:dict, run: 
     face_model, emotion_model, distilled_model, face_transforms, device = arch_v.load_video_models(params['wandb_id_emotion_model'],
                                                                                                    params['face_detector_size'])
     params['distilled_model'] = distilled_model
+    if params['emotion_threshold'] > 0:
+        params['confident_emotion_prediction'] = True # To avoid predictions when the number of frames in not full
+    
     first_execution = True
-
+    
     # Initialize metrics
-    global_sum_loss = 0.0
+    labels_confusion = torch.zeros(NUMBER_OF_EMOT, 4, device = 'cpu', dtype = torch.int) # [TP, FP, FN, TN] * NUMBER_OF_EMOT
     total_GTs, total_object_detections, total_emotion_detections = 0, 0, 0
     total_inference_time, total_inference_time_people = 0.0, 0.0
     total_frames = 0
     all_GT_labels, all_preds_labels = torch.empty(0, device = 'cpu', dtype = torch.long), torch.empty(0, device = 'cpu', dtype = torch.long)
     all_obj_pred_confidences, all_obj_TP_preds = torch.empty(0, device = 'cpu'), torch.empty(0, device = 'cpu', dtype = torch.int)
     acc1, acc2  = MulticlassAccuracy(device=device), MulticlassAccuracy(device=device, k = 2)
-    criterion = torch.nn.CrossEntropyLoss(reduction = 'sum')
     
     # List all files in the video directory and obtain the annotations
     video_files = os.listdir(video_dir)
@@ -153,15 +186,14 @@ def eval_model_on_videos(annotations_path:str, video_dir:str, params:dict, run: 
 
             cap = cv2.VideoCapture(os.path.join(video_dir, video_file))
 
-            [sum_loss_video, video_GTs, video_object_detections, video_emotion_detections,
+            [video_GTs, video_object_detections, video_emotion_detections,
              inference_time_video, inference_time_people_video,
              GT_labels_video, preds_labels_video, obj_pred_confidences, obj_TP_preds, 
              acc1, acc2] = eval_video(df_video, cap, video_filename, face_model, emotion_model, 
-                                                                            device, face_transforms, params, criterion, acc1, acc2)
+                                                                            device, face_transforms, params, acc1, acc2, labels_confusion)
             first_execution = False # Set to False after the first execution to reload the face model on the next iteration
             
             # Update metrics
-            global_sum_loss += sum_loss_video
             total_GTs += video_GTs
             total_object_detections += video_object_detections; total_emotion_detections += video_emotion_detections
             total_inference_time += inference_time_video; total_inference_time_people += inference_time_people_video
@@ -172,13 +204,14 @@ def eval_model_on_videos(annotations_path:str, video_dir:str, params:dict, run: 
             print(all_obj_pred_confidences.shape, all_obj_TP_preds.shape)
             print(all_obj_pred_confidences, all_obj_TP_preds)
 
-    print(global_sum_loss, total_GTs, video_object_detections, total_emotion_detections, 
+    print(total_GTs, video_object_detections, total_emotion_detections, 
                                     total_inference_time, total_inference_time_people, total_frames,
-                                    all_GT_labels, all_preds_labels)
+                                    all_GT_labels, all_preds_labels, labels_confusion)
     # Compute the metrics
-    save_video_test_wandb_metrics(global_sum_loss, total_GTs, total_object_detections, total_emotion_detections,  
+    save_video_test_wandb_metrics(total_GTs, total_object_detections, total_emotion_detections,  
                                     total_inference_time, total_inference_time_people, total_frames,
-                                    all_GT_labels, all_preds_labels, all_obj_pred_confidences, all_obj_TP_preds, acc1, acc2, run, params)
+                                    all_GT_labels, all_preds_labels, all_obj_pred_confidences, 
+                                    all_obj_TP_preds, acc1, acc2, labels_confusion, run, params)
 
 
 

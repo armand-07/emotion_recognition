@@ -154,6 +154,29 @@ def get_predictions(output:torch.Tensor) -> list:
 
 
 
+def get_predictions_distrib(distrib:torch.Tensor) -> list:
+    """Get the predictions from the output of the model. The input is the output of the model in logits. 
+    The function returns a list with the labels of the predictions as a string.
+    Params:
+        - output (torch.Tensor): The output of the model in distribution.
+    Returns:
+        - list: The list of the labels of the predictions.
+    """
+    # Check if the sum is less than 1
+    sum_less_than_one = torch.abs(torch.sum(distrib, dim=1) - 1) > 1e-3
+    # Get the indices of the maximum values
+    label_indices = torch.argmax(distrib, dim=1).cpu().numpy()
+
+    # If the sum is less than 1, set the label index to -1
+    label_indices[sum_less_than_one.cpu().numpy()] = -1
+
+    # Convert the label indices to labels
+    labels = [AFFECTNET_CAT_EMOT[i] if i != -1 else 'Uncertain' for i in label_indices]
+
+    return labels
+
+
+
 class RearrangeLayer(nn.Module):
     """Rearrange output neurons according to the order provided. It is done for the second dimension 
     (dim=1) where the emotions are, as the first dimension is the batch size. The order is a tensor 
