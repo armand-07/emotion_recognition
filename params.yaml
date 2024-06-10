@@ -43,7 +43,7 @@ eval:
 
 
 inference:
-  wandb_id_emotion_model: "vibrant-sweep-20"  # Wandb id of selected model
+  wandb_id_emotion_model: "sage-sweep-9"  # Wandb id of selected model
   face_detector_size: "medium"              # "nano" | "medium" | "large"
   face_threshold: 0.25
   tracking: True

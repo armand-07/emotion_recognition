@@ -209,8 +209,8 @@ def detect_faces_HAAR_cascade(img:np.array, pretrained_model) -> np.array:
 
 
 
-def detect_faces_YOLO(img:np.array, pretrained_model:ultralytics.YOLO, format:str = 'xywh', verbose:bool=False
-                      ) -> Tuple[torch.Tensor, torch.Tensor]:
+def detect_faces_YOLO(img:np.array, pretrained_model:ultralytics.YOLO, format:str = 'xywh', verbose:bool=False,
+                      device:torch.device = 'cuda') -> Tuple[torch.Tensor, torch.Tensor]:
     """ Detects faces in an image using the given YOLO pretrained model. The bbox is returned 
     with the specified bbox format.
     Params:
@@ -218,12 +218,13 @@ def detect_faces_YOLO(img:np.array, pretrained_model:ultralytics.YOLO, format:st
         - pretrained_model (ultralytics.YOLO): YOLO model
         - format (str): Format of the bbox returned. Options: 'xywh-center', 'xywh', 'xyxy'
         - verbose (bool): If True, it prints model information
+        - device (torch.device): Device to use for the model
     Returns:
         - boxes (torch.Tensor): Bounding boxes of the detected faces
         - conf (torch.Tensor): Confidence of the detection
     """
     # Make inference
-    results = pretrained_model.predict(img, verbose = verbose)
+    results = pretrained_model.predict(img, verbose = verbose, device = device)
     # Get confidence of detection
     conf = results[0].boxes.conf.cpu()
 

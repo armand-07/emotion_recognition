@@ -27,26 +27,28 @@ def main(wandb_id:str = None) -> None:
         - None
     """
     # Load the emotion model
-    wandb.login(key=wandbAPIkey)
-    api = wandb.Api()
-    artifact_dir = arch.get_wandb_artifact(wandb_id, api = api)
-    local_artifact = torch.load(os.path.join(artifact_dir, "model_best.pt"))
-    params = local_artifact["params"]
-    _, model, _, _, device = arch_v.load_video_models(wandb_id, 'nano', False, False)
-    _, model_cpu, _, _, device_cpu = arch_v.load_video_models(wandb_id, 'nano', False, True)
+    #wandb.login(key=wandbAPIkey)
+    #api = wandb.Api()
+    #artifact_dir = arch.get_wandb_artifact(wandb_id, api = api)
+    #local_artifact = torch.load(os.path.join(artifact_dir, "model_best.pt"))
+
+    #params = local_artifact["params"]
+
+    #_, model, _, _, device = arch_v.load_video_models(wandb_id, 'nano', False, False)
+    #_, model_cpu, _, _, device_cpu = arch_v.load_video_models(wandb_id, 'nano', False, True)
+
+    model, device = arch.model_creation("efficientnetb0", weights = 'affectnet_cat_emot')
+    model_cpu, device_cpu = arch.model_creation("efficientnetb0", weights = 'affectnet_cat_emot', device = 'cpu')
     batch_size = 9
     # Load the data
     print('Loading data...')
-    arch.seed_everything(params['random_seed'])
+    arch.seed_everything(33)
     dataloader_test = create_dataloader(datasplit = "test", batch_size = batch_size, 
-                                        image_norm = params['image_norm'], num_workers = 2)
+                                        image_norm = "affectnet", num_workers = 2)
 
     # Evaluate the model    
     print('Evaluating model...')
     eval_throughput(dataloader_test, model, device, batch_size)
-
-
-
     eval_throughput(dataloader_test, model_cpu, device_cpu, batch_size)
 
 
