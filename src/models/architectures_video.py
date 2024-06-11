@@ -428,7 +428,7 @@ def init_people_tracked(device:torch.device, window_size:int, preallocated_ids:i
     
 
 def postprocessing_inference(people_tracked:torch.Tensor, preds:torch.Tensor, bbox_ids:torch.Tensor, 
-                             device:torch.device, saving_prediction:str, confident_pred:bool, emotion_threshold:float, mode:str = 'standard') -> Tuple[dict, torch.Tensor]:
+                             device:torch.device, saving_prediction:str, mode:str = 'standard') -> Tuple[dict, torch.Tensor]:
     """Function to update the people_tracked with the new predictions and return the output predictions based 
     on the post processing mode. Depending on the saving_prediction parameter, it will save the predictions in logits 
     or in normalized version.
@@ -440,16 +440,15 @@ def postprocessing_inference(people_tracked:torch.Tensor, preds:torch.Tensor, bb
         - bbox_ids (torch.Tensor): The ids of the faces. It has shape [D].
         - device (torch.device): The device to be used.
         - saving_prediction (str): The method to save the predictions. It can be 'logits' or 'distrib'.
-        - confident_pred (bool): If True, it will only save the predictions that have the list full. 
-        - emotion_threshold (float): The threshold to be used for the emotion prediction.
         - mode (str): The mode to be used for the postprocessing. It can be 'standard' or 'temporal_average'.
     Returns:
         - torch.Tensor: The updated people_tracked. It has the bbox_id as row and per each column the 
         last N predictions of the model. The first row is used to store an special id for unknown tracking.
         - torch.Tensor: The updated labels list. It has shape [D, NUMBER_OF_EMOT], where D are the detections. 
+        - torch.Tensor: The sum of the predictions along the dimension 1. It has shape [D], where D are the detections.
     """
     if bbox_ids.shape[0] == 0:
-        return people_tracked, torch.zeros(1,NUMBER_OF_EMOT).to(device)
+        return people_tracked, torch.zeros(1,NUMBER_OF_EMOT).to(device), None
     
     assert saving_prediction in ['logits', 'distrib'], f"Invalid saving_prediction given: {saving_prediction}"
 
@@ -460,7 +459,7 @@ def postprocessing_inference(people_tracked:torch.Tensor, preds:torch.Tensor, bb
     
 
     if mode == 'standard':
-        return people_tracked, preds
+        return people_tracked, preds, torch.ones(preds.shape[0]).to(device)
     
     elif mode == 'temporal_average':
         processed_preds = torch.zeros((preds.shape[0], NUMBER_OF_EMOT)).to(device)
@@ -471,18 +470,46 @@ def postprocessing_inference(people_tracked:torch.Tensor, preds:torch.Tensor, bb
             processed_preds = mean_preds
         elif saving_prediction == 'distrib':
             processed_preds = torch.divide(mean_preds, torch.sum(mean_preds, dim=1, keepdim=True))  # Normalize the output to ensure it is 0-1 (as in init there may be norm preds with 0 init vectors)
-            if confident_pred:
-                sum_not_one = (1 - torch.sum(mean_preds, dim=1)) > 1e-3 # Check if the sum is not one so the N previous predictions were not full
-                processed_preds[sum_not_one] =  torch.zeros(NUMBER_OF_EMOT).to(device) # If the sum is not one, it means the N previous predictions were not full, so it is set to -1
-                # Get the maximum value of output_preds along dimension 1
-                max_values = torch.max(processed_preds, dim=1)[0]
-                # Check if the maximum value is above the confidence threshold
-                under_threshold = max_values < emotion_threshold
-                # If the maximum value is not above the confidence threshold, set output_preds to -1
-                processed_preds[under_threshold] = torch.zeros(NUMBER_OF_EMOT).to(device)
-        return people_tracked, processed_preds
+        return people_tracked, processed_preds, torch.sum(mean_preds, dim=1)
     else:
         raise ValueError(f"Invalid mode given for postprocessing inference: {mode}")
+    
+
+
+def standard_inference(ids, raw_preds, device, params):
+    if params['postprocessing'] != 'standard': # If tracking is disabled, only standard postprocessing is allowed
+        raise ValueError(f"Invalid postprocessing mode given: {params['postprocessing']} for tracking disabled. Only standard mode is allowed.")
+    if ids.shape[0] == 0: # If no faces are detected, return empty tensors
+        processed_preds = torch.zeros(1,NUMBER_OF_EMOT).to(device)
+    else:
+        processed_preds = raw_preds
+        if params['saving_prediction'] == 'distrib':
+            processed_preds = arch.get_distributions(processed_preds)
+    return processed_preds
+
+
+
+def set_confidence_threshold(processed_preds:torch.Tensor, sum_preds:torch.Tensor, emotion_threshold:float, device:torch.device) -> torch.Tensor:
+    """Function to set the confidence threshold to the predictions. If the sum of the predictions is not one, it means the N
+    previous predictions were not full, so it is set to -1. If the maximum value of the output_preds is below the confidence
+    threshold, it is set to -1.
+    Params:
+        - processed_preds (torch.Tensor): The processed predictions. It has shape [D, NUMBER_OF_EMOT], where D are the detections.
+        - sum_preds (torch.Tensor): The sum of the predictions along the dimension 1. It has shape [D], where D are the detections.
+        - emotion_threshold (float): The confidence threshold to be used.
+        - device (torch.device): The device to be used.
+    Returns:
+        - torch.Tensor: The processed predictions with the confidence threshold applied. It has shape [D, NUMBER_OF_EMOT], where D are the detections.
+    """
+    sum_not_one = (1 - sum_preds) > 1e-3 # Check if the sum is not one so the N previous predictions were not full
+    processed_preds[sum_not_one] =  torch.zeros(NUMBER_OF_EMOT).to(device) # If the sum is not one, it means the N previous predictions were not full, so it is set to -1
+    # Get the maximum value of output_preds along dimension 1
+    max_values = torch.max(processed_preds, dim=1)[0]
+    # Check if the maximum value is above the confidence threshold
+    under_threshold = max_values < emotion_threshold
+    # If the maximum value is not above the confidence threshold, set output_preds to -1
+    processed_preds[under_threshold] = torch.zeros(NUMBER_OF_EMOT).to(device)
+    return processed_preds
     
 
 
@@ -512,20 +539,21 @@ def get_pred_from_frame(frame:np.array, face_model:ultralytics.YOLO, emotion_mod
     else:
         faces_bbox, raw_preds, ids = get_raw_pred_from_frame(frame, face_model, emotion_model, params['distilled_model'], params['distilled_model_out_method'], 
                                                  device, face_transforms, params['face_threshold'], params['tracking'])
+        
+    sum_preds = torch.ones(ids.shape[0]).to(device) # Initialize the sum of the predictions to 1
     if params['tracking']:
-        people_tracked, processed_preds = postprocessing_inference(people_tracked, raw_preds, ids, device,
-                                                                    params['saving_prediction'], params['confident_emotion_prediction'], 
-                                                                    params['emotion_threshold'], params['postprocessing'])
+        people_tracked, processed_preds, sum_preds = postprocessing_inference(people_tracked, raw_preds, ids, device,
+                                                                    params['saving_prediction'], params['postprocessing'])
     else: 
-        if params['postprocessing'] != 'standard': # If tracking is disabled, only standard postprocessing is allowed
-            raise ValueError(f"Invalid postprocessing mode given: {params['postprocessing']}")
-        if ids.shape[0] == 0: # If no faces are detected, return empty tensors
-            processed_preds = torch.zeros(1,NUMBER_OF_EMOT).to(device)
-        else:
-            processed_preds = raw_preds
-            if params['saving_prediction'] == 'distrib':
-                processed_preds = arch.get_distributions(processed_preds)
-    
+        processed_preds = standard_inference(ids, raw_preds, device, params)
+        
+    if params['confident_emotion_prediction'] and params['saving_prediction'] == 'distrib':
+        if ids.shape[0] > 0: # If no faces are detected, return empty tensors
+            processed_preds = set_confidence_threshold(processed_preds, sum_preds, params['emotion_threshold'], device)
+    else:
+        assert params['confident_emotion_prediction'] == False, "Confident emotion prediction is only allowed when saving_prediction is 'distrib'."
+
+                                                                    
     if params['saving_prediction'] == 'logits':
         labels = arch.get_predictions(processed_preds)
     elif params['saving_prediction'] == 'distrib':
