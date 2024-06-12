@@ -72,7 +72,7 @@ def infer_screen(face_model:ultralytics.YOLO, emotion_model: torch.nn.Module, de
                                                                                                                 EMOT_COLORS_RGB, fig_evolution, ax_evolution, evolution_container)
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) # Convert the frame to standard BGR before printing
         cv2.imshow('Streaming inference', frame)
-        if cv2.waitKey(25) & 0xFF == ord('q'): # Press Q on keyboard to exit
+        if cv2.waitKey(1) & 0xFF == ord('q'): # Press Q on keyboard to exit
             break
 
 
@@ -132,7 +132,7 @@ def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_mode
 
             frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) # Convert the frame to standard BGR before printing
             cv2.imshow('Streaming inference', frame)
-            if cv2.waitKey(25) & 0xFF == ord('q'): # Press Q on keyboard to exit
+            if cv2.waitKey(1) & 0xFF == ord('q'): # Press Q on keyboard to exit
                 break
         else:
             break
