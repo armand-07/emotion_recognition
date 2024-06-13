@@ -154,6 +154,8 @@ def eval_model_on_videos(annotations_path:str, video_dir:str, params:dict, run: 
     params['distilled_model'] = distilled_model
     if params['emotion_threshold'] > 0:
         params['confident_emotion_prediction'] = True # To avoid predictions when the number of frames in not full
+    else:
+        params['confident_emotion_prediction'] = False
     
     first_execution = True
     

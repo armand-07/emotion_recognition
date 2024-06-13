@@ -46,14 +46,14 @@ inference:
   wandb_id_emotion_model: "hardy-water-969"  # Wandb id of selected model
   face_detector_size: "nano"              # "nano" | "medium" | "large"
   face_threshold: 0.25
-  emotion_threshold: 0.3                  # Emotion threhold for predicting 
+  emotion_threshold: 0                  # Emotion threhold for predicting 
   tracking: True                          # Use tracking to use temporal average
   saving_prediction: "distrib"            # "logits" | "distrib"
   postprocessing: "temporal_average"      # "standard" | "temporal_average" 
   window_size: 5                          # Size of the window when applying temporal_average
   distilled_model_out_method: "class"     # "class" | "distill" | "both" : only used in distilled models;
   show_mean_emotion_distrib: False        
-  show_mean_emotion_evolution: True       # Show evolution of the mean emotions across subjects detected
+  show_mean_emotion_evolution: False       # Show evolution of the mean emotions across subjects detected
   evolution_frames: 120                   # The number of last visible frames for mean_emotion_evolution
   save_result: True                       # To save the video after results
   show_inference: False                   # For seeing the result when saving a video

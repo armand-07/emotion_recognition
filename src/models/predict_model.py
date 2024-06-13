@@ -335,6 +335,8 @@ def main(mode: str, input_path: str, output_dir:str, cpu:bool, camera_id:int) ->
     params['distilled_model'] = distilled_model
     if params['emotion_threshold'] > 0:
         params['confident_emotion_prediction'] = True # To avoid predictions when the number of frames in not full
+    else:
+        params['confident_emotion_prediction'] = False
     
     if params['variable_color']: # If the color of the emotions is variable, it needs to be converted to RGB
         # Convert color names to RGB values
