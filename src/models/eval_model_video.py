@@ -82,10 +82,12 @@ def eval_video(annotations:str, cap:cv2.VideoCapture, name: str, face_model: ult
                     label_filter = GT_labels != 8 
                     GT_labels = GT_labels[label_filter]; bbox_idx_max_iou = bbox_idx_max_iou[label_filter]
                     emotion_detections = bbox_idx_max_iou.size(0)
+                    bbox_idx_filter = bbox_idx_max_iou.tolist()
                     total_emotion_detections += emotion_detections
                     if emotion_detections > 0: # If there are bbox_preds with GT label with label != 8 (that is the label "DNC" (Do Not Care))
-                        processed_preds = processed_preds[bbox_idx_max_iou] # Get the processed predictions of the GT bboxes with IoU above the threshold
-                        labels = labels[bbox_idx_max_iou] # Get the labels of the GT bboxes with IoU above the threshold with not DNC label
+                        processed_preds = processed_preds[bbox_idx_filter] # Get the processed predictions of the GT bboxes with IoU above the threshold
+                        labels = [labels[i] for i in bbox_idx_filter] # Get the labels of the GT bboxes with IoU above the threshold with not DNC label
+                        #print(len(labels), processed_preds.size())
                         if type(labels) != list: # If the labels are not a list, convert it to a list
                             labels = [labels]
                         if params['saving_prediction'] == 'logits':

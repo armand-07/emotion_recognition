@@ -69,6 +69,6 @@ test_video:
   tracking: True
   saving_prediction: "distrib"            # "logits" | "distrib"
   postprocessing: "temporal_average"      # "standard" | "temporal_average"
-  window_size: 5
+  window_size: 10
   distilled_model_out_method: "class"     # "class" | "distill" | "both" : only used in distilled models;
   IoU_threshold: 0.5
