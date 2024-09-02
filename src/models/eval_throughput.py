@@ -37,8 +37,8 @@ def main(wandb_id:str = None) -> None:
     #_, model, _, _, device = arch_v.load_video_models(wandb_id, 'nano', False, False)
     #_, model_cpu, _, _, device_cpu = arch_v.load_video_models(wandb_id, 'nano', False, True)
 
-    model, device = arch.model_creation("efficientnetb0", weights = 'affectnet_cat_emot')
-    model_cpu, device_cpu = arch.model_creation("efficientnetb0", weights = 'affectnet_cat_emot', device = 'cpu')
+    model, device = arch.model_creation("poster", weights = 'affectnet_cat_emot')
+    model_cpu, device_cpu = arch.model_creation("poster", weights = 'affectnet_cat_emot', device = 'cpu')
     batch_size = 9
     # Load the data
     print('Loading data...')
