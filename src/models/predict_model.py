@@ -8,6 +8,7 @@ import yaml
 
 
 import cv2
+from pyvirtualcam import Camera, PixelFormat
 import matplotlib.colors as mcolors
 try:
     import pyautogui as pg
@@ -40,9 +41,18 @@ def infer_screen(face_model:ultralytics.YOLO, emotion_model: torch.nn.Module, de
     # Get the video properties
     screenshot = np.array(pg.screenshot())
     height, width, _ = screenshot.shape
-    print(f"Camera resolution: {width}x{height}")
-    cv2.namedWindow('Streaming inference', cv2.WINDOW_NORMAL)
-    cv2.resizeWindow('Streaming inference', 1920, 1080)
+
+    # Check if virtual camera should be used
+    use_virtual_cam = params['use_virtual_cam']
+
+    if use_virtual_cam:
+        # Initialize virtual camera
+        virtual_cam = Camera(width=width, height=height, fps=fps_camera, fmt=PixelFormat.BGR)
+        print("Using virtual camera")
+    else:
+        # Create OpenCV window
+        cv2.namedWindow('Streaming inference', cv2.WINDOW_NORMAL)
+        cv2.resizeWindow('Streaming inference', width, height)
     # Set variables if parameters are activated
     if params['tracking']:
         people_tracked = arch_v.init_people_tracked(device, params['window_size']) # Initialize the emotion tracker
@@ -76,7 +86,6 @@ def infer_screen(face_model:ultralytics.YOLO, emotion_model: torch.nn.Module, de
             break
 
 
-
 def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_model: torch.nn.Module, device: torch.device, 
                 face_transforms:albumentations.Compose, EMOT_COLORS_RGB:list, params:dict) -> None:
     """Function to make inference in a video stream. It shows the results in a window.
@@ -97,13 +106,20 @@ def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_mode
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     print(f"Camera resolution: {width}x{height}")
-    cv2.namedWindow('Streaming inference', cv2.WINDOW_NORMAL)
-    cv2.resizeWindow('Streaming inference', width, height)
+
+    # Check if virtual camera should be used
+    use_virtual_cam = params["vcam"]
+    if use_virtual_cam:
+        virtual_cam = Camera(width=width, height=height, fps=fps_camera, fmt=PixelFormat.BGR)
+    else:
+        cv2.namedWindow('Streaming inference', cv2.WINDOW_NORMAL)
+        cv2.resizeWindow('Streaming inference', width, height)
+
     # Set variables if parameters are activated
+    people_tracked = None
     if params['tracking']:
         people_tracked = arch_v.init_people_tracked(device, params['window_size']) # Initialize the emotion tracker
-    else:
-        people_tracked = None
+        
     if params['show_mean_emotion_distrib']:
         fig_distrib, ax_distrib, distribution_container = create_figure_mean_emotion_distribution(height, width)
     if params['show_mean_emotion_evolution']:
@@ -131,12 +147,23 @@ def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_mode
                                                                                                                 EMOT_COLORS_RGB, fig_evolution, ax_evolution, evolution_container)
 
             frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) # Convert the frame to standard BGR before printing
-            cv2.imshow('Streaming inference', frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'): # Press Q on keyboard to exit
-                break
+            
+            if use_virtual_cam:
+                # Send frame to virtual camera
+                virtual_cam.send(frame)
+                virtual_cam.sleep_until_next_frame()
+            else:
+                # Show frame in OpenCV window
+                cv2.imshow('Streaming inference', frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):  # Presionar Q en el teclado para salir
+                    break
+
         else:
             break
-
+    # Release the capture and close the window
+    cap.release()
+    if not use_virtual_cam:
+        cv2.destroyAllWindows()
 
 
 def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, name:str, face_model: ultralytics.YOLO, 
@@ -306,7 +333,7 @@ def process_file(input_path:str, output_dir:str, face_model: ultralytics.YOLO, e
 
 
 
-def main(mode: str, input_path: str, output_dir:str, cpu:bool, camera_id:int) -> None:
+def main(mode: str, input_path: str, output_dir:str, cpu:bool, camera_id:int, vcam:bool) -> None:
     """Main function to run the inference of the model. It can make streaming inference, on a set of files or only a file.
     Args:
         - mode (str): The mode to be used for the inference.
@@ -349,6 +376,7 @@ def main(mode: str, input_path: str, output_dir:str, cpu:bool, camera_id:int) ->
     # Start with inference
     if mode == 'stream':
         cap = cv2.VideoCapture(camera_id)
+        params['vcam'] = vcam
         infer_stream(cap, face_model, emotion_model, device, face_transforms, EMOT_COLORS_RGB, params)
 
     elif mode == 'screen':
@@ -385,10 +413,11 @@ def parse_args():
     parser.add_argument('--output_dir', type=str, default = os.path.join(INFERENCE_DIR, 'output'), help= 'Directory to save results')
     parser.add_argument('--cpu', action=argparse.BooleanOptionalAction, help= 'Perform all the inference on CPU on non GPU hardware')
     parser.add_argument('--camera', type=int, default=0, help= 'The camera to be used for the streaming inference')
+    parser.add_argument('--vcam', action=argparse.BooleanOptionalAction, help= 'Create virtual camera to show the results')
     return parser.parse_args()
 
 
 
 if __name__ == '__main__':
     args = parse_args()
-    main(args.mode, args.input_path, args.output_dir, args.cpu, args.camera)
+    main(args.mode, args.input_path, args.output_dir, args.cpu, args.camera, args.vcam)
