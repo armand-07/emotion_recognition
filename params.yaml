@@ -1,0 +1,74 @@
+preprocessing:
+  random_seed: 33
+  orig_datasets: ["affectnet"]
+  train_split: 0.8 # val size split would be 1 - train_split
+  continuous_format: "cartesian"
+
+training:
+  random_seed: 33 #seed for reproducibility
+  daug_p_value: 0.7448959260828931
+  daug_horizontalflip: False
+  daug_shiftscalerotate: True
+  daug_coarsedropout: True
+  daug_colorjitter: False
+  daug_gaussnoise: True
+  image_norm: "affectnet"
+
+  distillation : True 
+  alpha: 0.587282684592565
+  decaying_strategy: "0"
+  embedding_method: "class"
+  arch: "deit_tiny" # architecture name
+  teacher_arch: "poster"
+  pretraining: "imagenet"
+  batch_size: 64 # training and valid batch size
+  epoch_samples: "original" # number of samples considered as one epoch, if None, the whole dataset length is considered
+  weighted_sampler_train: False
+  weighted_sampler_val: False
+  weighted_loss: True
+  label_smoothing: 0.04800825159456205
+
+  lr: 0.0000075 # learning rate
+  momentum: "none" # SGD momentum, for SGD only
+  optimizer: 'adamw' # optimization method: sgd | adam
+  epochs: 30  # maximum number of epochs to train
+  patience: 5 # how many epochs of no loss improvement should we wait before stop training
+
+
+eval:
+  random_seed: 33
+  arch: "efficientnet_b0"
+  image_norm: "affectnet"
+  weights: "affectnet_cat_emot"
+
+
+inference:
+  wandb_id_emotion_model: "hardy-water-969"  # Wandb id of selected model
+  face_detector_size: "nano"              # "nano" | "medium" | "large"
+  face_threshold: 0.25
+  emotion_threshold: 0.25                 # Emotion threhold for predicting 
+  tracking: True                          # Use tracking to use temporal average
+  saving_prediction: "distrib"            # "logits" | "distrib"
+  postprocessing: "temporal_average"      # "standard" | "temporal_average" 
+  window_size: 10                          # Size of the window when applying temporal_average
+  distilled_model_out_method: "class"     # "class" | "distill" | "both" : only used in distilled models;
+  show_mean_emotion_distrib: False        
+  show_mean_emotion_evolution: True      # Show evolution of the mean emotions across subjects detected
+  evolution_frames: 120                   # The number of last visible frames for mean_emotion_evolution
+  save_result: True                       # To save the video after results
+  show_inference: False                   # For seeing the result when saving a video
+  view_emotion_model_attention: False     # View model attention maps
+  variable_color: True                    # Change color depending on the emotion displayed
+
+
+test_video:
+  wandb_id_emotion_model: "hardy-water-969"  # Wandb id of selected model
+  face_detector_size: "nano"              # "nano" | "medium" | "large"
+  face_threshold: 0.25
+  emotion_threshold: 0.4
+  tracking: True
+  saving_prediction: "distrib"            # "logits" | "distrib"
+  postprocessing: "temporal_average"      # "standard" | "temporal_average"
+  window_size: 10
+  distilled_model_out_method: "class"     # "class" | "distill" | "both" : only used in distilled models;
+  IoU_threshold: 0.5
