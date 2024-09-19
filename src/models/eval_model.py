@@ -5,15 +5,13 @@ import argparse
 
 import torch
 from torch import nn
+import numpy as np
 
 import wandb
 
-import numpy as np
-import random
-
 from src import PROCESSED_AFFECTNET_DIR, NUMBER_OF_EMOT, MODELS_DIR, AFFECTNET_CAT_EMOT
 from src.models import architectures as arch
-from src.models.train_model import validate
+from src.models.train_model import validate, validate_distillation
 from src.data.dataset import create_dataloader
 from src.models.POSTER_V2.main import *
 
@@ -21,10 +19,19 @@ from config import wandbAPIkey
 
 
 
-def main(wandb_id):   
+def main(wandb_id:str = None) -> None:
+    """ Main function to evaluate the model. If a wandb_id is provided, the model weights are downloaded from 
+    the Weights and Biases server. If not, the parameters are read from the params.yaml file. The model is then
+    loaded and the test set is evaluated. If distillation is enabled, the model is evaluated using the three
+    different embedding methods. The results are logged to the Weights and Biases server.
+    Params:
+        - wandb_id (str): The id of the Weights and Biases run to download the model weights.
+    Returns:
+        - None
+    """
     wandb.login(key=wandbAPIkey)
     run = wandb.init(
-    entity='armand-07',
+    entity="armand-07",
     project="TFG Facial Emotion Recognition",
     job_type="test",
     )
@@ -45,6 +52,7 @@ def main(wandb_id):
         artifact_dir = arch.get_wandb_artifact(wandb_id, run)
         local_artifact = torch.load(os.path.join(artifact_dir, "model_best.pt"))
         params = local_artifact["params"]
+        print(f"Loaded best model at epoch {local_artifact['epoch']} from run {wandb_id}")
 
     wandb.config.update(params)
 
@@ -62,14 +70,26 @@ def main(wandb_id):
         model, device = arch.model_creation(params['arch'], local_artifact['state_dict'])
 
     criterion = nn.CrossEntropyLoss(reduction = 'mean') # Note that this case is equivalent to the combination of LogSoftmax and NLLLoss.
-
-    metrics = validate(dataloader_test, model, criterion, device, 0, batch_size, run)
-    print(metrics)
+    
+    if "distillation" in params and params["distillation"]: # If distillation is enabled test three embedding methods
+        metrics = validate_distillation(dataloader_test, model, criterion, embedding_method = "class",
+                        device = device, epoch = 0, batch_size = batch_size, run = run, test = True)
+        print(metrics)
+        metrics = validate_distillation(dataloader_test, model, criterion, embedding_method = "distill",
+                        device = device, epoch = 1, batch_size = batch_size, run = run, test = True)
+        print(metrics)
+        metrics = validate_distillation(dataloader_test, model, criterion, embedding_method = "both",
+                        device = device, epoch = 2, batch_size = batch_size, run = run, test = True)
+        print(metrics)
+    else: 
+        metrics = validate(dataloader_test, model, criterion, device, 0, batch_size, run, test = True)
+        print(metrics)
 
     wandb.finish()
 
 
 def parse_args():
+    """Parse the arguments of the script."""
     parser = argparse.ArgumentParser()
     parser.add_argument('--wandb_id', type=str, default=None, help='Run id to take the model weights')
     return parser.parse_args() 

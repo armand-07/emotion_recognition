@@ -11,18 +11,17 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torcheval.metrics import MulticlassAccuracy
 from torch.nn import functional as F
-
+import math
 
 from codecarbon import EmissionsTracker
 import wandb
 from wandb.sdk import wandb_run
 
-import math
-
-from src import MODELS_DIR
+from src import MODELS_DIR, NUMBER_OF_EMOT
 from src.data.dataset import create_dataloader
 from src.models import architectures as arch
 from src.models.metrics import save_val_wandb_metrics, save_val_wandb_metrics_dist
+from src.models.POSTER_V2.main import *
 
 from config import wandbAPIkey
 
@@ -47,7 +46,7 @@ def train(train_loader: DataLoader, model: torch.nn.Module, criterion: torch.nn,
     model.train()
     # Stablish some metrics to be saved during training
     global_epoch_loss = torch.zeros(1, dtype=torch.float, device = device)
-    acc = MulticlassAccuracy(device=device)
+    acc = MulticlassAccuracy(device=device, average = 'macro', num_classes = NUMBER_OF_EMOT)
     
     for i, (imgs, cat_target, _) in tqdm(enumerate(train_loader), total=len(train_loader),
                                                     desc = f'(TRAIN)Epoch {epoch+1}', 
@@ -108,7 +107,7 @@ def train_distillation(train_loader: DataLoader, model_student: torch.nn.Module,
     
     # Stablish some metrics to be saved during training
     global_epoch_loss = torch.zeros(1, dtype=torch.float, device = device)
-    acc = MulticlassAccuracy(device=device)
+    acc = MulticlassAccuracy(device=device, average = 'macro', num_classes = NUMBER_OF_EMOT)
     cos_sim = nn.CosineSimilarity(dim=1, eps=1e-6)
     global_cosine_sim = torch.zeros(1, dtype=torch.float, device = device)
     
@@ -157,7 +156,7 @@ def train_distillation(train_loader: DataLoader, model_student: torch.nn.Module,
 
 
 def validate(val_loader: DataLoader, model: torch.nn.Module, criterion: torch.nn, device: torch.device,
-             epoch: int, batch_size: int, run: wandb_run.Run) -> dict:
+             epoch: int, batch_size: int, run: wandb_run.Run, test:bool = False) -> dict:
     """
     Function to validate the model for one epoch. It computes many metrics and logs them to Weights and Biases and returns them.
     Parameters:
@@ -168,16 +167,20 @@ def validate(val_loader: DataLoader, model: torch.nn.Module, criterion: torch.nn
         - epoch: Current epoch number
         - batch_size: The size of the batches
         - run: Weights and Biases run object
+        - test: Flag to indicate if the validation is for test to add extra metrics
         Returns:
         - metrics: Dictionary with the metrics computed during the validation
     """
     model.eval() # switch model to evaluate mode
     # Stablish some metrics to be saved during validation
-    acc1 = MulticlassAccuracy(device=device)
-    acc2 = MulticlassAccuracy(device=device, k = 2)
+    if test: 
+        acc1 = MulticlassAccuracy(device=device)
+        acc2 = MulticlassAccuracy(device=device, k = 2)
+    else:
+        acc1 = MulticlassAccuracy(device=device, average = 'macro', num_classes = NUMBER_OF_EMOT)
+        acc2 = MulticlassAccuracy(device=device, k = 2, average = 'macro', num_classes = NUMBER_OF_EMOT)
     all_preds_labels = torch.empty(0, device = 'cpu')
     all_preds_distrib = torch.empty(0, device = 'cpu')
-    softmax = nn.Softmax(dim=1)
     all_targets = torch.empty(0, device = 'cpu')
     global_epoch_loss = 0.0
     
@@ -202,7 +205,7 @@ def validate(val_loader: DataLoader, model: torch.nn.Module, criterion: torch.nn
 
             # Store the predictions and targets to compute metrics
             all_preds_labels = torch.cat((all_preds_labels, predicted_label.cpu())) 
-            all_preds_distrib = torch.cat((all_preds_distrib, softmax(prediction).cpu())) # Apply softmax to the predictions as they are in logits
+            all_preds_distrib = torch.cat((all_preds_distrib, F.softmax(prediction, dim=1).cpu())) # Apply softmax to the predictions as they are in logits
             all_targets = torch.cat((all_targets, cat_target.cpu()))
             
             if i % 100 == 0: # Print the metrics every 100 batches
@@ -210,13 +213,13 @@ def validate(val_loader: DataLoader, model: torch.nn.Module, criterion: torch.nn
                 tqdm.write(f'VAL [{i+1}/{len(val_loader)}], Batch accuracy: {acc_batch:.2f}%; Batch Loss: {loss.item():.3f}')
         # Compute metrics
         metrics = save_val_wandb_metrics(acc1, acc2, val_loader, batch_size, all_targets, all_preds_distrib,
-                                 all_preds_labels, global_epoch_loss, epoch, run)
+                                 all_preds_labels, global_epoch_loss, epoch, run, test)
     return metrics
 
 
 
 def validate_distillation(val_loader: DataLoader, model: torch.nn.Module, criterion: torch.nn, embedding_method: str,
-                        device: torch.device, epoch: int, batch_size: int, run: wandb_run.Run) -> dict:
+                        device: torch.device, epoch: int, batch_size: int, run: wandb_run.Run, test:bool = False) -> dict:
     """
     Function to validate the model for one epoch using distillation. It computes many metrics and logs them to Weights 
     and Biases and returns them.
@@ -229,16 +232,20 @@ def validate_distillation(val_loader: DataLoader, model: torch.nn.Module, criter
         - epoch: Current epoch number
         - batch_size: The size of the batches
         - run: Weights and Biases run object
+        - test: Flag to indicate if the validation is for test to add extra metrics
         Returns:
         - metrics: Dictionary with the metrics computed during the validation
     """
     model.eval() # switch model to evaluate mode
     # Stablish some metrics to be saved during validation
-    acc1 = MulticlassAccuracy(device=device)
-    acc2 = MulticlassAccuracy(device=device, k = 2)
+    if test: 
+        acc1 = MulticlassAccuracy(device=device)
+        acc2 = MulticlassAccuracy(device=device, k = 2)
+    else:
+        acc1 = MulticlassAccuracy(device=device, average = 'macro', num_classes = NUMBER_OF_EMOT)
+        acc2 = MulticlassAccuracy(device=device, k = 2, average = 'macro', num_classes = NUMBER_OF_EMOT)
     all_preds_labels = torch.empty(0, device = 'cpu')
     all_preds_dist = torch.empty(0, device = 'cpu')
-    softmax = nn.Softmax(dim=1)
     all_targets = torch.empty(0, device = 'cpu')
     global_epoch_loss = 0.0
     cos_sim = nn.CosineSimilarity(dim=1, eps=1e-6)
@@ -273,7 +280,7 @@ def validate_distillation(val_loader: DataLoader, model: torch.nn.Module, criter
 
             # Store the predictions and targets to compute metrics
             all_preds_labels = torch.cat((all_preds_labels, predicted_label.cpu())) 
-            all_preds_dist = torch.cat((all_preds_dist, softmax(prediction).cpu())) # Apply softmax to the predictions as they are in logits
+            all_preds_dist = torch.cat((all_preds_dist, F.softmax(prediction, dim=1).cpu())) # Apply softmax to the predictions as they are in logits
             all_targets = torch.cat((all_targets, cat_target.cpu()))
             
             if i % 100 == 0: # Print the metrics every 100 batches
@@ -281,9 +288,8 @@ def validate_distillation(val_loader: DataLoader, model: torch.nn.Module, criter
                 tqdm.write(f'VAL [{i+1}/{len(val_loader)}], Batch accuracy: {acc_batch:.2f}%; Batch Loss: {loss.item():.3f}')
         
         # Compute metrics
-        metrics = save_val_wandb_metrics_dist(acc1, val_loader, batch_size, all_targets, all_preds_dist, 
-                           all_preds_labels, global_epoch_loss, epoch, global_cosine_sim,
-                           run)
+        metrics = save_val_wandb_metrics_dist(acc1, acc2, val_loader, batch_size, all_targets, all_preds_dist, 
+                           all_preds_labels, global_epoch_loss, global_cosine_sim, epoch, run, test)
     return metrics
 
 
@@ -313,7 +319,7 @@ def model_training(params = None):
     This function is able to perform a standard training (using params.yaml config), an extensive training from a wandb training 
     (taking its parameters and restart training), or a sweep training as a wandb agent.
     Parameters:
-        - params: Dictionary with the parameters of the training. If none is provided, this config will be set by Sweep Controller 
+        - params: Dictionary with the parameters of the training. If None is provided, this config will be set by Sweep Controller 
                 by wandb.agent
     Returns:
         - None
@@ -395,7 +401,8 @@ def model_training(params = None):
         distillation = True
         model_teacher, _ = arch.model_creation(params['teacher_arch'], weights = 'affectnet_cat_emot', device = device)
         model_teacher.eval()
-        criterion_distill = arch.define_criterion(params, params['label_smoothing_dist'], 'train', distillation = True, device = device)
+        # Distillation loss has no label smoothing nor weighting
+        criterion_distill = arch.define_criterion(params, 0.0, 'train', distillation = True, device = device)  
         alpha = params['alpha']
     else:
         distillation = False
@@ -410,6 +417,8 @@ def model_training(params = None):
     for epoch in range(params['epochs']):
         if distillation:
             decaying_strategy = int(params['decaying_strategy'])
+            print(f'Decaying strategy: {decaying_strategy}')
+            print("Alpha:", alpha)
             if decaying_strategy == 0:
                 alpha = params['alpha']
             elif decaying_strategy == 1:
@@ -467,6 +476,9 @@ def model_training(params = None):
     artifact.add_file(os.path.join(saving_path, 'emissions.csv'))
     run.log_artifact(artifact)
     run.finish()
+    
+    # Delete every local archive to avoid filling the disk with many trainings
+    shutil.rmtree(saving_path)
 
 
 
@@ -495,7 +507,7 @@ def main(mode, wandb_id):
         
     elif mode == 'sweep':
         # Path of the parameters file
-        config_sweep_path = Path("config_vit_pretrained_weighted_batch.yaml")
+        config_sweep_path = Path("config_deit_tiny_posterV2_hyperparameter_tunning_weighted_loss_better.yaml")
         # Read data preparation parameters
         with open(config_sweep_path, "r", encoding='utf-8') as config_file:
             try:

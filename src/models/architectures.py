@@ -1,7 +1,6 @@
 from typing import Union, Tuple
 import os
 
-
 import torchvision.models as models
 import torch.nn as nn
 from torch.nn import functional as F
@@ -32,7 +31,22 @@ def seed_everything(seed):
 
 
 
-def define_criterion(params, label_smoothing = 0.0, datasplit = 'train', distillation = False, device = 'cuda'):
+def define_criterion(params:dict, label_smoothing:float = 0.0, datasplit:str = 'train', 
+                     distillation:bool = False, device: torch.device = 'cuda') -> torch.nn.Module:
+    """Define the criterion to use in the training of the model. The criterion is defined by the
+    parameters in the dictionary params. The function returns the criterion to use in the training 
+    of the model.
+    Params:
+        - params (dict): The dictionary with the parameters of the model. It should contain the 
+            'criterion' key with the name of the criterion to use. It can be 'crossentropy'.
+        - label_smoothing (float): The label smoothing to use in the crossentropy loss. It should be 
+            a value between 0 and 1. Default is 0.0.
+        - datasplit (str): The datasplit to use to calculate the label weights. It should be 'train' or 'val'.
+        - distillation (bool): If True, the criterion is used for distillation. Default is False.
+        - device (torch.device): The device to use for the model. It can be 'cuda' or 'cpu'.
+    Returns:
+        - torch.nn.Module: The criterion to use in the training of the model.
+    """
     # Define criterion
     if 'criterion' not in params:
         criterion_name = 'crossentropy'
@@ -58,11 +72,23 @@ def define_criterion(params, label_smoothing = 0.0, datasplit = 'train', distill
 
 
 
-def define_optimizer(model, optimizer_name, lr, momentum):     
+def define_optimizer(model:torch.nn.Module, optimizer_name:str, lr:float, momentum:float) -> torch.optim.Optimizer:
+    """Define the optimizer to use in the training of the model. The optimizer is defined by the optimizer_name,
+    the learning rate and the momentum. The function returns the optimizer to use in the training of the model.
+    Params:
+        - model (torch.nn.Module): The model to train.
+        - optimizer_name (str): The name of the optimizer to use. It can be 'adam', 'adamw', 'rmsprop', 'sgd' or 'none'.
+        - lr (float): The learning rate of the optimizer.
+        - momentum (float): The momentum of the optimizer. It is only used if the optimizer is 'rmsprop' or 'sgd'.
+    Returns:
+        - torch.optim.Optimizer: The optimizer to use in the training of the model.
+    """   
     # Define optimizer
     optimizer_name = optimizer_name.lower()
     lr = float(lr)
-    momentum = float(momentum)
+    if momentum != 'none':
+        momentum = float(momentum)
+        
     if optimizer_name == 'adam':
         optimizer = optim.Adam(model.parameters(), lr=lr)
     elif optimizer_name == 'adamw':
@@ -78,30 +104,92 @@ def define_optimizer(model, optimizer_name, lr, momentum):
     
     return optimizer
 
-def get_distributions(output):
+
+
+def get_pred_distilled_model(model:torch.nn.Module, imgs:torch.Tensor, output_method:str) -> torch.Tensor:
+    """Get the predictions of the distilled model. The function returns the 
+    predictions of the distilled model based on the output output method chosen. 
+    It can be chosen between 'class', 'distill' or 'both' (sum between 'distill' and 'class' logits).
+    Params:
+        - model (torch.nn.Module): The model to use to predict the images.
+        - imgs (torch.Tensor): The images to predict.
+        - output_method (str): The output method to use. It can be 'class', 'distill' or 'both'.
+    Returns:
+        - torch.Tensor: The predictions of the distilled model based on the output method chosen.
+    """
+    pred, pred_dist = model(imgs)
+    if output_method == "class":
+        return pred
+    elif output_method == "distill":
+        return pred_dist
+    elif output_method == "both":
+        return pred + pred_dist
+    else:
+        raise ValueError(f"Invalid embedding method: {output_method}")
+
+
+
+def get_distributions(output:torch.Tensor) -> torch.Tensor:
+    """Get the distributions from the output of the model. The input is the output of the model in logits.
+        Params:
+            - output (torch.Tensor): The output of the model in logits.
+        Returns:
+            - torch.Tensor: The distributions of the predictions."""
     return F.softmax(output, dim=1)
 
-def get_predictions(output):
+
+
+def get_predictions(output:torch.Tensor) -> list:
+    """Get the predictions from the output of the model. The input is the output of the model in logits. 
+    The function returns a list with the labels of the predictions as a string.
+    Params:
+        - output (torch.Tensor): The output of the model in logits.
+    Returns:
+        - list: The list of the labels of the predictions.
+    """
     distrib = F.softmax(output, dim=1)
     label_indices = torch.argmax(distrib, dim=1).cpu().numpy()
     labels = [AFFECTNET_CAT_EMOT[i] for i in label_indices]
     return labels
-    
 
+
+
+def get_predictions_distrib(distrib:torch.Tensor) -> list:
+    """Get the predictions from the output of the model. The input is the output of the model in logits. 
+    The function returns a list with the labels of the predictions as a string.
+    Params:
+        - output (torch.Tensor): The output of the model in distribution.
+    Returns:
+        - list: The list of the labels of the predictions.
+    """
+    # Check if the sum is less than 1
+    sum_less_than_one = torch.abs(torch.sum(distrib, dim=1) - 1) > 1e-3
+    # Get the indices of the maximum values
+    label_indices = torch.argmax(distrib, dim=1).cpu().numpy()
+
+    # If the sum is less than 1, set the label index to -1
+    label_indices[sum_less_than_one.cpu().numpy()] = -1
+
+    # Convert the label indices to labels
+    labels = [AFFECTNET_CAT_EMOT[i] if i != -1 else 'Uncertain' for i in label_indices]
+
+    return labels
 
 
 
 class RearrangeLayer(nn.Module):
+    """Rearrange output neurons according to the order provided. It is done for the second dimension 
+    (dim=1) where the emotions are, as the first dimension is the batch size. The order is a tensor 
+    with the desired order of the emotions."""
     def __init__(self, order):
         super().__init__()
         self.order = order
-
     def forward(self, x):
-        # Rearrange the tensor according to the order provided for the second dimension (dim=1) where the emotions are
         return torch.index_select(x, 1, self.order)  
     
 
-def resnet34(pretrained = True, weights = "none"):
+
+def resnet34(pretrained:bool = True, weights:str = "none") -> torch.nn.Module:
     """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 2048"""
     if pretrained: # equivalent to ResNet50_Weights.IMAGENET1K_V1
         model = models.resnet34(weights = "DEFAULT")
@@ -115,7 +203,8 @@ def resnet34(pretrained = True, weights = "none"):
     return model
 
 
-def resnet50(pretrained = True, weights = "none"):
+
+def resnet50(pretrained:bool = True, weights:str = "none") -> torch.nn.Module:
     """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 2048"""
     if pretrained: # equivalent to ResNet50_Weights.IMAGENET1K_V1
         model = models.resnet50(weights = "DEFAULT")
@@ -128,8 +217,19 @@ def resnet50(pretrained = True, weights = "none"):
     return model
 
 
-def resnet101(pretrained = True, weights = "none"):
-    """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 2048"""
+
+def resnet101(pretrained:bool = True, weights:str = "none") -> torch.nn.Module:
+    """Create a ResNet101 model with the specified pretrained weights. The expected input 
+    size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 2048.
+    Params:
+        - pretrained (bool): If True, the model is created with pre-trained weights with imagenet. 
+            If False, the model is created with random weights.
+        - weights (str): The weights for the model. If "none", the model is created with 
+            the past weights. If not, the model is created with the ".pt" or ".pth" weights of the 
+            given path. 
+    Returns:
+        - torch.nn.Module: The created ResNet101 model.
+    """
     if pretrained: # equivalent to ResNet50_Weights.IMAGENET1K_V1
         model = models.resnet101(weights = "DEFAULT")
     else:
@@ -143,8 +243,14 @@ def resnet101(pretrained = True, weights = "none"):
 
 
 
-def resnext50_32x4d (pretrained = True):
-    """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 2048"""
+def resnext50_32x4d (pretrained:bool = True) -> torch.nn.Module:
+    """ Create a ResNeXt50_32x4d model with the specified pretrained weights. The expected input size is defined as 224x224x3, 
+    so the flattened tensor after all convolutional layers is 2048.
+    Params:
+        - pretrained (bool): If True, the model is created with pre-trained weights with imagenet. 
+            If False, the model is created with random weights.
+    Returns:
+        - torch.nn.Module: The created ResNeXt50_32x4d model."""
     if pretrained:
         model = models.resnext50_32x4d(weights = "DEFAULT") # equivalent to ResNeXt50_32x4d_Weights.IMAGENET1K_V1
     else:
@@ -153,26 +259,8 @@ def resnext50_32x4d (pretrained = True):
     return model
 
 
-
-def vgg16(pretrained = True):
+def poster_v2(weights:str = "none") -> torch.nn.Module:
     """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 1000"""
-    model = models.vgg16(pretrained = pretrained) 
-    model.classifier[6] = nn.Linear(4096, NUMBER_OF_EMOT)
-    return model
-
-
-class RecorderMeter1(object):
-    pass
-class RecorderMeter(object):
-    pass
-
-
-def poster_v2(weights = "none"):
-    """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 1000"""
-    
-    RecorderMeter1()
-    RecorderMeter()
-    
     # create model
     model = pyramid_trans_expr2(img_size=224, num_classes=8)
     if weights.lower() == "none":
@@ -187,15 +275,29 @@ def poster_v2(weights = "none"):
 
 
 
-def efficientnet_b0(device, pretrained = True, weights = "none"):
-    """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 1280"""
+def efficientnet_b0(device:torch.device, pretrained:bool = True, weights:str = "none") -> torch.nn.Module:
+    """Create a EfficientNetB0 model with the specified weights. The model is created with the specified weights.
+    The expected input is a tensor of [B, 3, 224, 224]. So the flattened tensor after all convolutional layers is 1280.
+    The last layer is a linear layer with 8 outputs that is reorganized to match the standard AffectNet order using the 
+    RearrangeLayer class.
+    Source: https://arxiv.org/abs/1905.11946
+    Params:
+        - device (torch.device): The device to use for the model. It can be 'cuda' or 'cpu'.
+        - pretrained (bool): If True, the model is created with pre-trained weights with imagenet. 
+            If False, the model is created with random weights.
+        - weights (str): The weights for the model. If "none", the model is created with 
+            random weights. If "affectnet_cat_emot", the model is created with the weights 
+            of the model trained on affectnet.
+    Returns:
+        - torch.nn.Module: The created EfficientNetB0 model.
+    """
     if weights.lower() == "none":
         model = timm.create_model('tf_efficientnet_b0_ns', pretrained = pretrained)
         model.classifier=nn.Sequential(nn.Linear(in_features=1280, out_features=NUMBER_OF_EMOT))
 
     elif weights.lower()  == "affectnet_cat_emot":
         weights_path = os.path.join(MODELS_DIR, "EfficientNetB0", "enet_b0_8_best_vgaf.pt")
-        print("Weights obtained from: https://github.com/av-savchenko/face-emotion-recognition/blob/main/models/affectnet_emotions/enet_b0_8_va_mtl.pt")
+        print("Weights obtained from: https://github.com/av-savchenko/face-emotion-recognition/blob/main/models/affectnet_emotions/enet_b0_8_best_vgaf.pt")
         model = torch.load(weights_path)
 
         # To match the standard AffectNet order targets it is needed to rearrange the output of the model, as it is sorted alphabetically
@@ -215,8 +317,22 @@ def efficientnet_b0(device, pretrained = True, weights = "none"):
 
 
 
-def efficientnet_b2(device, pretrained = True, weights = "none"):
-    """Input size is defined as 224x224x3, so the flattened tensor after all convolutional layers is 1408"""
+def efficientnet_b2(device:torch.device, pretrained:bool = True, weights:str = "none") -> torch.nn.Module:
+    """Create a EfficientNetB2 model with the specified weights. The model is created with the specified weights.
+    The expected input is a tensor of [B, 3, 224, 224]. So the flattened tensor after all convolutional layers is 1408.
+    The last layer is a linear layer with 8 outputs that is reorganized to match the standard AffectNet order using the 
+    RearrangeLayer class.
+    Source: https://arxiv.org/abs/1905.11946
+    Params:
+        - device (torch.device): The device to use for the model. It can be 'cuda' or 'cpu'.
+        - pretrained (bool): If True, the model is created with pre-trained weights with imagenet. 
+            If False, the model is created with random weights.
+        - weights (str): The weights for the model. If "none", the model is created with 
+            random weights. If "affectnet_cat_emot", the model is created with the weights 
+            of the model trained on affectnet.
+    Returns:
+        - torch.nn.Module: The created EfficientNetB2 model.
+    """
     if weights.lower() == "none":
         model = timm.create_model('tf_efficientnet_b2_ns', pretrained = pretrained)
         model.classifier=nn.Sequential(nn.Linear(in_features=1408, out_features=NUMBER_OF_EMOT))
@@ -244,8 +360,19 @@ def efficientnet_b2(device, pretrained = True, weights = "none"):
     
 
 
-
-def ViT_base16(pretrained = True, weights = "none"):
+def ViT_base16(pretrained:bool = True, weights:str = "none") -> torch.nn.Module:
+    """Create a Vision Transformer model with the base size and 16x16 patch size. 
+    The model is created with the specified weights. The expected input is a tensor of [B, 3, 224, 224].
+    Source: https://arxiv.org/abs/2010.11929
+    Parameters:
+        - pretrained (bool): If True, the model is created with pre-trained weights with imagenet. 
+            If False, the model is created with random weights.
+        - weights (str): The weights for the model. If "none", the model is created with 
+            random weights. If "affectnet_cat_emot", the model is created with the weights 
+            of the model trained on affectnet.
+    Returns:
+        - torch.nn.Module: The created ViT model.
+    """
     if pretrained: # pretraining on imagenet
         model = timm.create_model('vit_base_patch16_224', pretrained=True, num_classes = NUMBER_OF_EMOT)
     else:
@@ -257,7 +384,30 @@ def ViT_base16(pretrained = True, weights = "none"):
 
 
 
+def attention_forward_wrapper(attn_obj):
+    """ Change in forward function to save attention map to later on be able to visualize it
+    Source: https://github.com/huggingface/pytorch-image-models/discussions/1232"""
+    def my_forward(x):
+        B, N, C = x.shape
+        qkv = attn_obj.qkv(x).reshape(B, N, 3, attn_obj.num_heads, C // attn_obj.num_heads).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv.unbind(0)   # make torchscript happy (cannot use tensor as tuple)
+
+        attn = (q @ k.transpose(-2, -1)) * attn_obj.scale
+        attn = attn.softmax(dim=-1)
+        attn = attn_obj.attn_drop(attn)
+        attn_obj.attn_map = attn
+        attn_obj.cls_attn_map = attn[:, :, 0, 2:]
+
+        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        x = attn_obj.proj(x)
+        x = attn_obj.proj_drop(x)
+        return x
+    return my_forward
+
+
+
 class Hook():
+    """Hook to get the outputs from a distilled model."""
     def __init__(self, module):
         self.hook = module.register_forward_hook(self.hook_fn)
     def hook_fn(self, module, input, output):
@@ -268,6 +418,8 @@ class Hook():
 
 
 class DeiT_model(nn.Module):
+    """Wrapper class to get the outputs from a distilled model. Both results 
+    from the head are saved."""
     def __init__(self, base_model):
         super().__init__()  # Call to parent class's __init__ method
         self.base_model = base_model
@@ -283,7 +435,20 @@ class DeiT_model(nn.Module):
 
 
 
-def DeiT (size = "tiny", pretrained = True, weights = "none"):
+def DeiT (size:str = "tiny", pretrained:bool = True, weights:str = "none") -> torch.nn.Module:
+    """Create a DeiT model with the specified size. The model is created with the specified weights.
+    The expected input is a tensor of [B, 3, 224, 224].
+    Source: https://arxiv.org/abs/2012.12877v2
+    Parameters:
+        - size (str): The size of the DeiT model. It can be "tiny", "small" or "base".
+        - pretrained (bool): If True, the model is created with pre-trained weights with imagenet. 
+            If False, the model is created with random weights.
+        - weights (str): The weights for the model. If "none", the model is created with 
+            random weights. If "affectnet_cat_emot", the model is created with the weights 
+            of the model trained on affectnet.
+    Returns:
+        - torch.nn.Module: The created DeiT model.
+    """
     if size == "tiny":
         model = timm.create_model('deit_tiny_distilled_patch16_224.fb_in1k', pretrained=pretrained, num_classes = NUMBER_OF_EMOT)
     elif size == "small":
@@ -301,7 +466,7 @@ def DeiT (size = "tiny", pretrained = True, weights = "none"):
 
 
 
-def model_creation(arch_type:str, weights:Union[str, dict] = "none", device = None) -> Tuple[torch.nn.Module, torch.device]:
+def model_creation(arch_type:str, weights:Union[str, dict] = "none", device:torch.device = None) -> Tuple[torch.nn.Module, torch.device]:
     """
     Create a model with the specified architecture and weights. If weights is not specified, 
     the model will be created with random weights. If a pretraining is given, the model will 
@@ -310,18 +475,17 @@ def model_creation(arch_type:str, weights:Union[str, dict] = "none", device = No
         - arch_type (str): The architecture of the model. 
         - weights (str or dict, optional): The weights for the model. If a string is provided, 
             it should be either "imagenet" for pre-trained weights or "none" for random weights. 
-            If a dict with the weights is provided (result of model.state_dict() of a torch model), it will 
-            be used as the weights for the model.
+            If a dict with the weights is provided (result of model.state_dict() of a torch model),
+            it will be used as the weights for the model.
         - device (torch.device, optional): The device to use for the model. If not provided,
             it will use the GPU if available.
-
     Returns:
         - torch.nn.Module: The created model 
         - torch.device: The CUDA/CPU device that will be used to train/validate/inference the model
     """
     if device is None: # If device is not provided by the user, instanciate it
         assert torch.cuda.is_available()
-        device = torch.device("cuda")
+        device = torch.device("cuda:0")
         print(f'Using CUDA with {torch.cuda.device_count()} GPUs')
         print(f'Using CUDA device:{torch.cuda.get_device_name(torch.cuda.current_device())}')
 
@@ -343,8 +507,8 @@ def model_creation(arch_type:str, weights:Union[str, dict] = "none", device = No
     # Create the model following the architecture specified in the parameters
     arch_type = arch_type.lower()
 
-    print(f"Creating model with architecture: {arch_type}")
-    print(f"Using pre-trained weights: {pretrained}")
+    print(f"Creating FER model with architecture: {arch_type}")
+    print(f"Using imagenet pre-trained weights: {pretrained}")
     print(f"Using custom weights of type {type(weights)}: {weights if isinstance(weights, str) else ''}")
     
     if arch_type.startswith("resnet"): # ResNet architectures
@@ -384,9 +548,19 @@ def model_creation(arch_type:str, weights:Union[str, dict] = "none", device = No
 
 
 
-def get_wandb_artifact(wandb_id:str, run:wandb.run = None, api = None):
+def get_wandb_artifact(wandb_id:str, run:wandb.run = None, api:wandb.api = None) -> str:
+    """Download the model weights from wandb. The function returns the path to the downloaded 
+    artifact.
+    Params:
+        - wandb_id (str): The id of the wandb artifact to download.
+        - run (wandb.run, optional): The run object to use to download the artifact. 
+            If not provided, the api object should be provided.
+        - api (wandb.api, optional): The api object to use to download the artifact. 
+            If not provided, the run object should be provided.
+    Returns:
+        - str: The path to the downloaded artifact."""
     
-    print(f'Using trained model: {wandb_id}')
+    print(f'Using FER trained model: {wandb_id}')
     try: # Try to download the model weights from name
         if not wandb_id.startswith("armand-07/TFG Facial Emotion Recognition/model_"):
             full_wandb_id = "armand-07/TFG Facial Emotion Recognition/model_" + wandb_id + ":latest"
@@ -406,6 +580,8 @@ def get_wandb_artifact(wandb_id:str, run:wandb.run = None, api = None):
         artifact = run.use_artifact(full_wandb_id, type = "model")
     elif api is not None:
         artifact = api.artifact(full_wandb_id, type = "model")
+    else:
+        raise ValueError("Either run or api should be provided to download the artifact")
 
     # Download artifact and load params
     artifact_dir = artifact.download()

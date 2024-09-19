@@ -9,8 +9,7 @@ from torch.utils.data import DataLoader, WeightedRandomSampler
 from albumentations.pytorch import ToTensorV2
 import cv2
 
-from src import PROCESSED_AFFECTNET_DIR
-
+from src import PROCESSED_AFFECTNET_DIR, DATA_DIR
 
 
 class AffectNetDataset(Dataset):
@@ -122,8 +121,17 @@ def data_transforms(only_normalize:bool = False, daug_params:dict = dict(), imag
         transforms.append(A.Normalize(mean=[0.485, 0.456, 0.406], 
             std=[0.229, 0.224, 0.225]))
     elif image_norm.lower() == "affectnet":   # Normalize the image with the mean and std of the AffectNet dataset
-        normalization_values = torch.load(
-            os.path.join (PROCESSED_AFFECTNET_DIR, 'dataset_normalization_values.pt'))
+        norm_values_path = os.path.join (PROCESSED_AFFECTNET_DIR, 'dataset_normalization_values.pt')
+        if os.path.exists(norm_values_path):
+            normalization_values = torch.load(norm_values_path)
+        else: 
+            norm_values_path = os.path.join (DATA_DIR, 'affectnet', 'dataset_normalization_values.pt')
+            if os.path.exists(norm_values_path):
+                normalization_values = torch.load(norm_values_path)
+            else:
+                raise ValueError("Normalization values for AffectNet dataset not found")
+            
+            
         transforms.append(A.Normalize(mean=normalization_values['mean'], 
             std=normalization_values['std']))
     elif image_norm.lower() == "none":        # Do not normalize the image, only to [0-1] range

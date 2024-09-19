@@ -45,6 +45,7 @@ configobj==5.0.8
 contourpy==1.2.0
 cryptography==41.0.7
 cycler==0.12.1
+Cython==3.0.10
 datasets==2.17.0
 debugpy==1.8.0
 decorator==5.1.1
@@ -114,6 +115,7 @@ jupyterlab-widgets==3.0.9
 jupyterlab_server==2.25.1
 kiwisolver==1.4.5
 kombu==5.3.4
+lapx==0.5.7
 lazy_loader==0.3
 libdeeplake==0.0.104
 lz4==4.3.3
@@ -158,6 +160,7 @@ prometheus-client==0.18.0
 prompt-toolkit==3.0.41
 protobuf==4.25.3
 psutil==5.9.6
+ptflops==0.7.2.2
 ptyprocess==0.7.0
 pure-eval==0.2.2
 py-cpuinfo==9.0.0
