@@ -50,7 +50,7 @@ inference:
   tracking: True                          # Use tracking to use temporal average
   saving_prediction: "distrib"            # "logits" | "distrib"
   postprocessing: "temporal_average"      # "standard" | "temporal_average" 
-  window_size: 10                          # Size of the window when applying temporal_average
+  window_size: 7                          # Size of the window when applying temporal_average
   distilled_model_out_method: "class"     # "class" | "distill" | "both" : only used in distilled models;
   show_mean_emotion_distrib: False        
   show_mean_emotion_evolution: True      # Show evolution of the mean emotions across subjects detected
