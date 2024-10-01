@@ -43,7 +43,7 @@ def infer_screen(face_model:ultralytics.YOLO, emotion_model: torch.nn.Module, de
     height, width, _ = screenshot.shape
 
     # Check if virtual camera should be used
-    use_virtual_cam = params['use_virtual_cam']
+    use_virtual_cam = params['vcam']
 
     if use_virtual_cam:
         # Initialize virtual camera
@@ -380,6 +380,7 @@ def main(mode: str, input_path: str, output_dir:str, cpu:bool, camera_id:int, vc
         infer_stream(cap, face_model, emotion_model, device, face_transforms, EMOT_COLORS_RGB, params)
 
     elif mode == 'screen':
+        params['vcam'] = vcam
         infer_screen(face_model, emotion_model, device, face_transforms, EMOT_COLORS_RGB, params)
 
     elif mode == 'save':

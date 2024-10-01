@@ -407,7 +407,7 @@ def get_raw_pred_from_frame(img:np.array, face_model:ultralytics.YOLO, emotion_m
         return filtered_faces_bbox, raw_preds, filtered_ids
 
 
-def init_people_tracked(device:torch.device, window_size:int, preallocated_ids:int = 1000) -> torch.Tensor:
+def init_people_tracked(device:torch.device, window_size:int, preallocated_ids:int = 100000) -> torch.Tensor:
     """Function to initialize the people tracked as a torch.Tensor. Each row represents a person 
     and each column the N'th last emotion prediction.
     Params:
@@ -422,7 +422,7 @@ def init_people_tracked(device:torch.device, window_size:int, preallocated_ids:i
         is used to store an special id for unknown tracking. So the track ids should start from 1.
     """
     people_tracked = torch.zeros((preallocated_ids, window_size, NUMBER_OF_EMOT)).to(device)
-    people_tracked[0] = torch.ones(window_size,NUMBER_OF_EMOT).to(device) # If no tracking id, it returns a uniform distribution, it is located at the end of the tensor
+    people_tracked[0] = torch.ones(window_size,NUMBER_OF_EMOT).to(device) # If no tracking id, it returns a uniform distribution, it is located at the start of the tensor
     return people_tracked
 
     

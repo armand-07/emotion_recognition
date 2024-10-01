@@ -44,7 +44,7 @@ eval:
 
 inference:
   wandb_id_emotion_model: "hardy-water-969"  # Wandb id of selected model
-  face_detector_size: "nano"              # "nano" | "medium" | "large"
+  face_detector_size: "medium"              # "nano" | "medium" | "large"
   face_threshold: 0.25
   emotion_threshold: 0.25                 # Emotion threhold for predicting 
   tracking: True                          # Use tracking to use temporal average
