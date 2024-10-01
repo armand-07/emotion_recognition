@@ -8,5 +8,7 @@ To see pip list: “pip list”
 To deactivate:  “deactivate”
 To create requirements txt: “pip freeze > requirements.txt”
 
+pip install -r requirements.txt
+
 
 Problems with certificates: pip install pip-system-certs
