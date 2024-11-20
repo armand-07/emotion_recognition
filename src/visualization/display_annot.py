@@ -225,7 +225,7 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
             raise ValueError("The format of the bounding box is not valid. It must be 'xywh', 'xywh-center' or 'xyxy'")
         id = bbox_ids[i].item()
         if id != -1 and bbox_ids is not None: # If bbox_ids is not None and the id is not Unknown
-            text = str(id) + ":" + labels[i]
+            text = str(id) + ": " + labels[i]
             if color_list is not None:
                 bbox_color = color_list[FROM_EMOT_TO_ID[labels[i]]]
         elif id == -1: # If bbox_ids is not None and the id is Unknown
@@ -264,21 +264,27 @@ def plot_bbox_emot(img:np.array, bbox:np.array, labels:list, bbox_ids:np.array =
                 img[y_plot:y_plot+h_plot, x_plot:x_plot+w_plot], 0.55, cls_colored, 0.45, 0)
             
         # First set the thickness of the bbox
-        bbox_thickness = int(round(max_img_size / 500))
+        bbox_thickness = int(round(max_img_size / 250))
         bbox_thickness = max(1, bbox_thickness)
         # Add bbox
         cv2.rectangle(img, (x, y), (x+w, y+h), bbox_color, bbox_thickness)
-            
+
         # Finds space required by the text so that we can put a correct background
         font_scale = max_img_size / 1500
         text_thickness = int(round(max_img_size / 750))
         text_thickness = max(1, text_thickness) # Make sure text_thickness is at least 1
-        (w_text, h_text), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX , font_scale, text_thickness) 
-
+        # Calcula el tamaño del texto para ajustar la posición
+        (text_width_user, h_text), _ = cv2.getTextSize("User", cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_thickness)
+        (text_width_id, _), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_thickness)
+        
+        # Set position of the text
+        w_text = int(text_width_user * 1.1 + text_width_id)
         # Add text and background above the bbox
-        img = cv2.rectangle(img, (x, y - int(h_text*1.5)), (x + w_text, y), bbox_color, -1)
-        img = cv2.putText(img, text, (x, y - int(h_text*0.3)),
-                                cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_color, int(text_thickness), lineType = cv2.LINE_AA)
+        img = cv2.rectangle(img, (x-(bbox_thickness//2), y-int(h_text*1.5)), 
+                            (x+(bbox_thickness//2)+w_text, y), bbox_color, -1)
+        img = cv2.putText(img, "User", (x, y - int(h_text*0.3)), cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_color, text_thickness, lineType=cv2.LINE_AA)
+        img = cv2.putText(img, text, (int(x + text_width_user * 1.1), y - int(h_text*0.3)), cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_color, text_thickness, lineType=cv2.LINE_AA)
+        
 
     if display:
         # Displaying the image  
