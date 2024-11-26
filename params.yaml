@@ -44,7 +44,7 @@ eval:
 
 inference:
   wandb_id_emotion_model: "hardy-water-969"  # Wandb id of selected model
-  face_detector_size: "nano"              # "nano" | "medium" | "large"
+  face_detector_size: "medium"              # "nano" | "medium" | "large"
   face_threshold: 0.25
   emotion_threshold: 0.25                 # Emotion threhold for predicting 
   tracking: True                          # Use tracking to use temporal average
@@ -56,7 +56,7 @@ inference:
   show_mean_emotion_evolution: False      # Show evolution of the mean emotions across subjects detected
   evolution_frames: 120                   # The number of last visible frames for mean_emotion_evolution
   save_result: True                       # To save the video after results
-  show_inference: True                   # For seeing the result when saving a video
+  show_inference: False                   # For seeing the result when saving a video
   view_emotion_model_attention: False     # View model attention maps
   variable_color: True                    # Change color depending on the emotion displayed
 
