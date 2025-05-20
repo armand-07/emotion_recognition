@@ -57,7 +57,7 @@ inference:
   evolution_frames: 120                   # The number of last visible frames for mean_emotion_evolution
   save_result: True                       # To save the video after results
   show_inference: False                   # For seeing the result when saving a video
-  view_emotion_model_attention: False     # View model attention maps
+  view_emotion_model_attention: True     # View model attention maps
   variable_color: True                    # Change color depending on the emotion displayed
 
 

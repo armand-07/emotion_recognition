@@ -155,7 +155,7 @@ def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_mode
             else:
                 # Show frame in OpenCV window
                 cv2.imshow('Streaming inference', frame)
-                if cv2.waitKey(1) & 0xFF == ord('q'):  # Presionar Q en el teclado para salir
+                if cv2.waitKey(1) & 0xFF == ord('q'):  # Press Q on keyboard to exit
                     break
 
         else:
@@ -204,7 +204,7 @@ def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, nam
         cv2.resizeWindow(name, width, height)
 
     # Read until video is completed
-    for frame_id in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc = f'Analizing video "{name}"'):
+    for frame_id in tqdm(range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))), desc = f'Analyzing video "{name}"'):
         # Capture frame-by-frame
         ret, frame = cap.read()     # ret is a boolean that returns True if the frame is available. frame is the image array.
         if ret == True:
@@ -391,7 +391,7 @@ def main(mode: str, input_path: str, output_dir:str, cpu:bool, camera_id:int, vc
             first_execution = True
             for file in files:
                 input_file_path = os.path.join(input_path, file)
-                if params['tracking'] and not first_execution: # If tracking is enabled, it needs to restart the tracking by realoading the model
+                if params['tracking'] and not first_execution: # If tracking is enabled, it needs to restart the tracking by reloading the model
                     face_model = arch_v.load_YOLO_model_face_recognition(size = params['face_detector_size'], device = device)
                 process_file(input_file_path, output_dir, face_model, emotion_model, device, face_transforms, EMOT_COLORS_RGB, params)
                 first_execution = False
