@@ -5,6 +5,7 @@ from tqdm import tqdm
 from typing import Tuple
 from pathlib import Path
 import yaml
+import csv
 
 
 import cv2
@@ -23,6 +24,40 @@ from src import INFERENCE_DIR, NUMBER_OF_EMOT, EMOT_COLORS
 import src.models.architectures_video as arch_v
 from src.visualization.display_annot import plot_bbox_emot, plot_mean_emotion_distribution, plot_mean_emotion_evolution, create_figure_mean_emotion_distribution, create_figure_mean_emotion_evolution
 
+
+def write_emotions_to_csv(csv_writer, csv_file, frame_id: int, labels: list, ids: list, processed_preds) -> None:
+    """Write emotion data for a single frame to CSV file.
+    Args:
+        - csv_writer: CSV writer object
+        - csv_file: CSV file object for flushing
+        - frame_id (int): Current frame number
+        - labels (list): List of emotion labels detected
+        - ids (list): List of person IDs corresponding to emotions
+        - processed_preds: Processed predictions with confidence scores
+    """
+    if len(labels) > 0:
+        # Combine all detected emotions for this frame with person IDs
+        emotions_list = []
+        for i, label in enumerate(labels):
+            # Get person ID
+            person_id = ids[i] if i < len(ids) else "unknown"
+            
+            # Get confidence score if available in processed_preds
+            if processed_preds is not None and len(processed_preds) > i:
+                confidence = processed_preds[i].max().item()
+                emotion_str = f"ID:{person_id}-{label}({confidence:.3f})"
+            else:
+                emotion_str = f"ID:{person_id}-{label}"
+            emotions_list.append(emotion_str)
+        emotions_detected = '; '.join(emotions_list)
+    else:
+        emotions_detected = "No faces detected"
+    
+    csv_writer.writerow({
+        'frame_number': frame_id,
+        'emotions_detected': emotions_detected
+    })
+    csv_file.flush()  # Ensure data is written to file immediately
 
 
 def infer_screen(face_model:ultralytics.YOLO, emotion_model: torch.nn.Module, device: torch.device, 
@@ -166,13 +201,14 @@ def infer_stream(cap:cv2.VideoCapture, face_model:ultralytics.YOLO, emotion_mode
         cv2.destroyAllWindows()
 
 
-def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, name:str, face_model: ultralytics.YOLO, 
+def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, csv_output_path:str ,name:str, face_model: ultralytics.YOLO, 
                         emotion_model: torch.nn.Module, device: torch.device, face_transforms: albumentations.Compose,
                         EMOT_COLORS_RGB:list, params:dict) -> None:
     """Function to make inference in a video and save the result in capturer.
     Args:
         - cap (cv2.VideoCapture): The video capture object.
         - output_cap (cv2.VideoWriter): The video writer object.
+        - csv_output_path (str): The path to save the CSV file with the emotions predictions.
         - name (str): The name of the video.
         - face_model (YOLO): The face detector model.
         - emotion_model (torch.nn.Module): The emotion model.
@@ -189,7 +225,15 @@ def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, nam
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     print(f"Camera resolution: {width}x{height}")
+
     # Set variables if parameters are activated
+    csv_file = None
+    csv_writer = None
+    if csv_output_path: # Initialize CSV file if path is provided
+        csv_file = open(csv_output_path, 'w', newline='', encoding='utf-8')
+        fieldnames = ['frame_number', 'emotions_detected']
+        csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        csv_writer.writeheader()
     if params['tracking']:
         people_tracked = arch_v.init_people_tracked(device, params['window_size']) # Initialize the emotion tracker
     else:
@@ -211,6 +255,9 @@ def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, nam
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             faces_bbox, labels, ids, processed_preds, people_tracked = arch_v.get_pred_from_frame(frame, face_model, emotion_model, device, 
                                                                                                 face_transforms, people_tracked, params)
+            # Write emotion data to CSV if CSV writer is available
+            if csv_writer:
+                write_emotions_to_csv(csv_writer, csv_file, frame_id, labels, ids, processed_preds)
             if params['save_result'] or params['show_inference']: # Show the visual results if needed
                 if params['view_emotion_model_attention'] and len(ids) != 0:
                     cls_weight = emotion_model.base_model.blocks[-1].attn.cls_attn_map.mean(dim=1).view(-1, 14, 14).detach().to('cpu') 
@@ -233,6 +280,8 @@ def infer_video_and_save(cap: cv2.VideoCapture, output_cap: cv2.VideoWriter, nam
                     output_cap.write(frame)
 
         else: # Break the loop if video has ended
+            if csv_file:
+                csv_file.close()
             break
 
 
@@ -253,7 +302,9 @@ def process_file(input_path:str, output_dir:str, face_model: ultralytics.YOLO, e
     Returns:
         - None 
     """
-    if input_path.endswith('.jpg') or input_path.endswith('.png'):
+    file_extension = input_path.lower()
+
+    if file_extension.endswith('.jpg') or file_extension.endswith('.png'):
         # Set tracking off for images
         params_image = dict(params)
         params_image['tracking'] = False
@@ -300,7 +351,7 @@ def process_file(input_path:str, output_dir:str, face_model: ultralytics.YOLO, e
             print("Saving in:", output_filename)
 
 
-    elif input_path.endswith('.mp4') or input_path.endswith('.avi') or input_path.endswith('.mov'):
+    elif file_extension.endswith('.mp4') or file_extension.endswith('.avi') or file_extension.endswith('.mov'):
         cap = cv2.VideoCapture(input_path)
         # Get the width, height, total frames and fps of the video
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -313,12 +364,20 @@ def process_file(input_path:str, output_dir:str, face_model: ultralytics.YOLO, e
         output_filename = os.path.join(output_dir, name+"_inference.mp4")
         if os.path.exists(output_filename):
             os.remove(output_filename)
+        
+        # Define CSV output path if CSV export is enabled
+        csv_output_filename = None
+        if params.get('save_csv', False):
+            csv_output_filename = os.path.join(output_dir, name+"_emotions.csv")
+            if os.path.exists(csv_output_filename):
+                os.remove(csv_output_filename)
+
         # Define the codec and create VideoWriter object
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         output_cap = cv2.VideoWriter(output_filename, fourcc, fps, (frame_width, frame_height))
         # Make inference
         start = time.time()
-        infer_video_and_save(cap, output_cap, name, face_model, emotion_model, device, face_transforms, EMOT_COLORS_RGB, params)
+        infer_video_and_save(cap, output_cap, csv_output_filename, name, face_model, emotion_model, device, face_transforms, EMOT_COLORS_RGB, params)
         end = time.time()
         # Store results and release the video capture object
         cap.release()
@@ -333,7 +392,7 @@ def process_file(input_path:str, output_dir:str, face_model: ultralytics.YOLO, e
 
 
 
-def main(mode: str, input_path: str, output_dir:str, cpu:bool, camera_id:int, vcam:bool) -> None:
+def main(mode: str, input_path: str, output_dir:str, cpu:bool, camera_id:int, vcam:bool, save_csv:bool) -> None:
     """Main function to run the inference of the model. It can make streaming inference, on a set of files or only a file.
     Args:
         - mode (str): The mode to be used for the inference.
@@ -341,6 +400,7 @@ def main(mode: str, input_path: str, output_dir:str, cpu:bool, camera_id:int, vc
         - output_dir (str): The directory to save the results.
         - cpu (bool): Perform inference on CPU
         - camera_id (int): The camera to be used for the streaming inference.
+        - save_csv (bool): Save emotion predictions to CSV file for videos.
     Returns:
         - None
     """
@@ -356,6 +416,8 @@ def main(mode: str, input_path: str, output_dir:str, cpu:bool, camera_id:int, vc
         except yaml.YAMLError as exc:
             print(exc)
     params['job_type'] = "test"
+    params['save_csv'] = save_csv
+
 
     face_model, emotion_model, distilled_model, face_transforms, device = arch_v.load_video_models(params['wandb_id_emotion_model'], params['face_detector_size'], 
                                                                                                    params['view_emotion_model_attention'], cpu)
@@ -415,10 +477,12 @@ def parse_args():
     parser.add_argument('--cpu', action=argparse.BooleanOptionalAction, help= 'Perform all the inference on CPU on non GPU hardware')
     parser.add_argument('--camera', type=int, default=0, help= 'The camera to be used for the streaming inference')
     parser.add_argument('--vcam', action=argparse.BooleanOptionalAction, help= 'Create virtual camera to show the results')
+    parser.add_argument('--csv', action=argparse.BooleanOptionalAction, help= 'Save emotion predictions to CSV file for videos')
+
     return parser.parse_args()
 
 
 
 if __name__ == '__main__':
     args = parse_args()
-    main(args.mode, args.input_path, args.output_dir, args.cpu, args.camera, args.vcam)
+    main(args.mode, args.input_path, args.output_dir, args.cpu, args.camera, args.vcam, args.csv)
